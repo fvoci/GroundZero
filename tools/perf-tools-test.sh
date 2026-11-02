@@ -433,5 +433,25 @@ check sharing-invalid-lock sharing_lifecycle invalid-lock
 check sharing-lock-creation-error sharing_lifecycle lock-error
 check sharing-missing-owned-lock sharing_lifecycle missing-owned-lock
 check sharing-rejects-lock-injection-mismatch sharing_lifecycle injection-mismatch
+fresh_aggregate_target() {
+  local fresh_root="$out/fresh-aggregate"
+  mkdir -p "$fresh_root/tools/fixtures"
+  cp tools/perf-task-screens-test.sh tools/perf-depth.jq "$fresh_root/tools/"
+  cp tools/fixtures/perf-task-screens-aggregate.json "$fresh_root/tools/fixtures/"
+  test ! -e "$fresh_root/target"
+  bash -euo pipefail -s -- "$fresh_root" <<'FRESH'
+  fresh_root=$1
+  git() { printf '%s\n' "$fresh_root"; }
+  export -f git
+  export fresh_root
+  bash "$fresh_root/tools/perf-task-screens-test.sh"
+  test -d "$fresh_root/target"
+FRESH
+}
+check task-screen-fresh-target fresh_aggregate_target
+check task-screen-aggregate-witnesses bash tools/perf-task-screens-test.sh
+check screen-build-overlap bash tools/perf-screen-overlap-test.sh
+check full-build-command-state bash tools/perf-build-state-test.sh
+check monitor-fails-closed bash tools/perf-monitor-lifecycle-test.sh
 check measurement-window bash tools/perf-window-test.sh
 test "$failures" -eq 0

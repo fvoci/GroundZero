@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
@@ -6,10 +6,16 @@ import { api, ApiError, NetworkError } from '$lib/api/client';
 import { activityApi } from '$lib/features/activity/api';
 import { workApi } from '$lib/features/tasks/api';
 import { taskData } from '$lib/features/tasks/detail-data';
+import {
+  taskScreenApi,
+  type DetailRead,
+  type DetailOptionsRead,
+} from '$lib/features/tasks/screen-api';
 import type { TaskResource } from '$lib/features/tasks/model';
 import TaskDetail from '$lib/features/tasks/TaskDetail.svelte';
 import { timeData } from '$lib/features/time/data';
 import { setLocale } from '$lib/paraglide/runtime.js';
+import { me } from '$lib/me.svelte';
 import { TASK_ITEM } from '../../stories/fixtures/synthetic';
 
 function held<T>() {
@@ -39,7 +45,22 @@ const resource: TaskResource = {
   updated_at: '2026-10-31T00:00:00Z',
 };
 
+function aggregateRead(): DetailRead {
+  return {
+    viewer_id: 'viewer',
+    task: resource,
+    item: TASK_ITEM,
+    archived: false,
+    tasks: [resource],
+    assignees: [],
+    dependencies: [],
+    series: [],
+    checklist: [],
+  };
+}
+
 beforeEach(async () => {
+  me.userId = 'viewer';
   await setLocale('ko', { reload: false });
   vi.spyOn(workApi, 'task').mockResolvedValue(resource);
   vi.spyOn(workApi, 'tasks').mockResolvedValue([]);
@@ -58,6 +79,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   cleanup();
+  me.userId = '';
   vi.restoreAllMocks();
   localStorage.clear();
   sessionStorage.clear();
@@ -75,6 +97,28 @@ function mount(itemId = resource.item_id) {
   };
   return render(TaskDetail, props);
 }
+
+it.each([401, 403, 404])(
+  'clears the entire detail on an options permission error %s',
+  async (status) => {
+    vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(aggregateRead());
+    vi.spyOn(taskScreenApi, 'options').mockRejectedValue(
+      new ApiError(status, 'not_found', 'denied'),
+    );
+    render(TaskDetail, {
+      taskId: resource.id,
+      tasks: [],
+      workspaces: [],
+      aggregate: true,
+      onchanged: () => undefined,
+      onopen: () => undefined,
+    });
+    await screen.findByRole('alert');
+    expect(screen.queryByLabelText('제목')).toBeNull();
+    expect(taskData.taskStatuses).not.toHaveBeenCalled();
+    expect(taskData.assignable).not.toHaveBeenCalled();
+  },
+);
 
 it('starts every item-scope read while the task is pending, then composes an empty collection', async () => {
   const task = held<TaskResource>();
@@ -185,4 +229,64 @@ it('ignores an old task response after the detail is replaced', async () => {
   old.resolve(resource);
   await tick();
   expect(screen.getByLabelText('제목')).toHaveValue('다음 상세');
+});
+
+it('does not keep another task scope status choices when the aggregate section fails', async () => {
+  const read: DetailRead = {
+    viewer_id: 'viewer',
+    task: resource,
+    item: TASK_ITEM,
+    archived: false,
+    tasks: [resource],
+    assignees: [],
+    dependencies: [],
+    series: [],
+    checklist: [],
+  };
+  const options: DetailOptionsRead = {
+    viewer_id: 'viewer',
+    item_id: TASK_ITEM.id,
+    statuses: {
+      state: 'ready',
+      value: [
+        {
+          id: 'old-status',
+          name: 'previous scope choice',
+          color: '',
+          position: 0,
+          category: 'todo',
+          task_count: 1,
+        },
+      ],
+    },
+    assignable: { state: 'ready' as const, value: [] },
+  };
+  vi.spyOn(taskScreenApi, 'detail').mockResolvedValue(read);
+  const optional = vi.spyOn(taskScreenApi, 'options').mockResolvedValue(options);
+  const view = render(TaskDetail, {
+    taskId: resource.id,
+    tasks: [],
+    workspaces: [],
+    aggregate: true,
+    onchanged: () => undefined,
+    onopen: () => undefined,
+  });
+  expect(await screen.findByLabelText('제목')).toHaveValue(resource.title);
+  await fireEvent.keyDown(screen.getByLabelText('상태'), { key: 'Enter' });
+  expect(await screen.findByRole('option', { name: 'previous scope choice' })).toBeVisible();
+  await fireEvent.keyDown(screen.getByLabelText('상태'), { key: 'Escape' });
+  vi.mocked(taskScreenApi.detail).mockResolvedValue({
+    ...read,
+    task: { ...resource, id: 'next-task', title: '다음 집계 상세' },
+  });
+  optional.mockResolvedValue({ ...options, statuses: { state: 'failed', error: 'unavailable' } });
+  await view.rerender({ taskId: 'next-task' });
+  await waitFor(() => {
+    expect(screen.getByLabelText('제목')).toHaveValue('다음 집계 상세');
+  });
+  expect(await screen.findByRole('alert')).toHaveTextContent('업무를 불러오지 못했습니다.');
+  await fireEvent.keyDown(screen.getByLabelText('상태'), { key: 'Enter' });
+  expect(screen.queryByRole('option', { name: 'previous scope choice' })).toBeNull();
+  expect(taskData.taskStatuses).not.toHaveBeenCalled();
+  expect(taskData.assignable).not.toHaveBeenCalled();
 });

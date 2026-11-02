@@ -1,0 +1,44 @@
+[
+  {
+    "screen": "board",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/items/item/task-context", "start": 10, "end": 40 },
+      { "path": "/api/items/item/recurrences/sync", "start": 40, "end": 50 },
+      { "path": "/api/items/item/task-board", "start": 50, "end": 60 }
+    ]
+  },
+  {
+    "screen": "gantt",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/items/item/task-context", "start": 10, "end": 40 },
+      { "path": "/api/items/item/recurrences/sync", "start": 40, "end": 50 },
+      { "path": "/api/items/item/task-board", "start": 50, "end": 60 }
+    ]
+  },
+  {
+    "screen": "task-detail",
+    "repeat": 1,
+    "requests": [
+      { "path": "/api/me", "start": 0, "end": 10 },
+      { "path": "/api/workspaces", "start": 10, "end": 20 },
+      { "path": "/api/me/organizations", "start": 10, "end": 30 },
+      { "path": "/api/items/item/task-context", "start": 10, "end": 40 },
+      { "path": "/api/items/item/recurrences/sync", "start": 40, "end": 50 },
+      { "path": "/api/items/item/task-board", "start": 50, "end": 60 },
+      { "path": "/api/tasks/task/detail-read", "start": 40, "end": 70 },
+      { "path": "/api/items/item/task-detail-options", "start": 70, "end": 85 },
+      { "path": "/api/tasks/task/comments", "start": 70, "end": 80 },
+      { "path": "/api/tasks/task/time", "start": 70, "end": 85 },
+      { "path": "/api/tasks/task/backlinks", "start": 70, "end": 90 },
+      { "path": "/api/me/marks/task/task", "start": 70, "end": 95 }
+    ]
+  }
+]

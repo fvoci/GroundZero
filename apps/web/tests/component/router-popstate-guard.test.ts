@@ -189,6 +189,37 @@ describe('router popstate guard', () => {
     expect(guard).not.toHaveBeenCalled();
     expect(router.hash).toBe('#ref-1');
   });
+
+  it('invalidates pending reads synchronously for accepted path changes only', () => {
+    const initial = router.navigationGeneration;
+    router.navigate('/shared');
+    router.navigate('/notes');
+    expect(router.navigationGeneration).toBe(initial + 2);
+    router.replace('/time');
+    expect(router.navigationGeneration).toBe(initial + 3);
+    popTo('/notes');
+    expect(router.navigationGeneration).toBe(initial + 4);
+    router.guard = () => false;
+    router.navigate('/shared');
+    popTo('/shared');
+    router.navigate('/notes#ref-2');
+    expect(router.navigationGeneration).toBe(initial + 4);
+  });
+
+  it('keeps same-item views and dialogs together but invalidates a coalesced item exit', () => {
+    const base = '/w/11111111-1111-1111-1111-111111111111/i/22222222-2222-2222-2222-222222222222';
+    router.navigate(`${base}/tasks/board`);
+    const initial = router.itemGeneration;
+    router.navigate(`${base}/tasks/board/t/33333333-3333-3333-3333-333333333333`);
+    router.replace(`${base}/tasks/gantt`);
+    expect(router.itemGeneration).toBe(initial);
+    router.navigate('/notes');
+    router.navigate(`${base}/tasks/board`);
+    expect(router.itemGeneration).toBe(initial + 2);
+    router.guard = () => false;
+    router.navigate('/notes');
+    expect(router.itemGeneration).toBe(initial + 2);
+  });
 });
 
 // 이동이 아닌 문맥 전환(조직 바꾸기)도 같은 가드를 거친다: 막히면 실행하지 않고, 떠나기로 하면 가드가 그 동작을 실행한다.

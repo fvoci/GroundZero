@@ -156,6 +156,14 @@ impl FromRef<AppState> for fvoci_home::HomeState {
     }
 }
 
+impl FromRef<AppState> for fvoci_task_screens::TaskScreensState {
+    fn from_ref(state: &AppState) -> Self {
+        Self {
+            db: state.db.clone(),
+        }
+    }
+}
+
 impl FromRef<AppState> for fvoci_activity::ActivityState {
     fn from_ref(state: &AppState) -> Self {
         Self {

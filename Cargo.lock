@@ -1390,6 +1390,7 @@ dependencies = [
  "fvoci-search",
  "fvoci-storage",
  "fvoci-system",
+ "fvoci-task-screens",
  "fvoci-time",
  "fvoci-work",
  "hex",
@@ -1453,6 +1454,22 @@ dependencies = [
  "utoipa",
  "uuid",
  "zip",
+]
+
+[[package]]
+name = "fvoci-task-screens"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "fvoci-core",
+ "fvoci-db",
+ "fvoci-http",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "time",
+ "utoipa",
+ "uuid",
 ]
 
 [[package]]
