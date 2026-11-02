@@ -14,14 +14,18 @@ import { PROJECT_MODULE, TASK_ITEM, WORKSPACE } from '../../stories/fixtures/syn
 import { TEST_ORGANIZATION } from './fixtures/organization';
 import { readSessionGeneration } from '$lib/features/auth/session-signal';
 import { SESSION_CHECK_MAX_ATTEMPTS } from '$lib/features/auth/session-check';
-import { request } from '$lib/shared/api';
+import { request, SessionListMismatch } from '$lib/shared/api';
 
 let originalLocks: PropertyDescriptor | undefined;
 
 function held<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((done) => (resolve = done));
-  return { promise, resolve };
+  let reject!: (error: Error) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
 }
 const identity: Me = {
   id: 'viewer',
@@ -116,6 +120,123 @@ afterEach(() => {
 
 const viewerCases = (['notes', 'tasks', 'restore'] as const).flatMap((path) =>
   (['workspaces', 'organizations'] as const).map((list) => [path, list] as const),
+);
+
+const listAudits = (['notes', 'tasks', 'restore'] as const).flatMap((path) =>
+  (['workspaces', 'organizations'] as const).map((list) => [path, list] as const),
+);
+async function settledLists(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 0);
+  });
+  await tick();
+}
+
+it.each(listAudits)(
+  'SR-299 audit %s stays closed after an ordinary failure before a %s mismatch',
+  async (path, list) => {
+    router.navigate(
+      path === 'tasks' ? itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board') : '/notes',
+    );
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: { request: () => new Promise<never>(() => undefined) },
+    });
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+    if (path === 'restore') {
+      render(App);
+      await screen.findByTestId('workspace-switcher');
+    }
+    const notesBefore = vi.mocked(api.myNotes).mock.calls.length;
+    const mismatch = held<never>();
+    const ordinary = new ApiError(500, 'failed', 'ordinary list failure');
+    if (list === 'workspaces') {
+      vi.mocked(api.workspaces).mockReturnValueOnce(mismatch.promise);
+      vi.mocked(api.myOrganizations).mockRejectedValueOnce(ordinary);
+    } else {
+      vi.mocked(api.myOrganizations).mockReturnValueOnce(mismatch.promise);
+      vi.mocked(api.workspaces).mockRejectedValueOnce(ordinary);
+    }
+    if (path === 'restore')
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    else render(App);
+    await waitFor(() => {
+      expect(api.workspaces).toHaveBeenCalledTimes(path === 'restore' ? 2 : 1);
+    });
+    await settledLists();
+    mismatch.reject(new SessionListMismatch());
+    await settledLists();
+    expect(screen.queryByTestId('workspace-switcher')).toBeNull();
+    expect(screen.queryByTestId('task-board')).toBeNull();
+    expect(taskScreenApi.board).not.toHaveBeenCalled();
+    expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+    expect(api.myNotes).toHaveBeenCalledTimes(notesBefore);
+    expect(api.me).toHaveBeenCalledTimes(path === 'restore' ? 2 : 1);
+    if (path === 'restore') expect(accountSafety.switching || accountSafety.restoring).toBe(true);
+  },
+);
+
+it.each(listAudits)(
+  'SR-299 audit %s stays closed for an older %s mismatch while the newer attempt waits or fails',
+  async (path, list) => {
+    router.navigate(
+      path === 'tasks' ? itemViewPath(WORKSPACE.id, TASK_ITEM.id, 'board') : '/notes',
+    );
+    Object.defineProperty(navigator, 'locks', {
+      configurable: true,
+      value: { request: () => new Promise<never>(() => undefined) },
+    });
+    vi.spyOn(api, 'workspaces').mockResolvedValue([WORKSPACE]);
+    vi.spyOn(api, 'myOrganizations').mockResolvedValue([
+      { ...TEST_ORGANIZATION, id: WORKSPACE.organization_id },
+    ]);
+    vi.spyOn(taskScreenApi, 'context').mockResolvedValue(context);
+    if (path === 'restore') {
+      render(App);
+      await screen.findByTestId('workspace-switcher');
+    }
+    const notesBefore = vi.mocked(api.myNotes).mock.calls.length;
+    const mismatch = held<never>();
+    const failure = held<never>();
+    const spaces = held<Workspace[]>();
+    const organizations = held<OrganizationSummary[]>();
+    vi.mocked(api.workspaces)
+      .mockReturnValueOnce(list === 'workspaces' ? mismatch.promise : failure.promise)
+      .mockReturnValue(spaces.promise);
+    vi.mocked(api.myOrganizations)
+      .mockReturnValueOnce(list === 'organizations' ? mismatch.promise : failure.promise)
+      .mockReturnValue(organizations.promise);
+    if (path === 'restore')
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    else render(App);
+    await waitFor(() => {
+      expect(api.workspaces).toHaveBeenCalledTimes(path === 'restore' ? 2 : 1);
+    });
+    if (path === 'restore')
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    else accountSafety.generation += 1;
+    failure.reject(new ApiError(500, 'failed', 'older ordinary failure'));
+    await waitFor(() => {
+      expect(api.workspaces).toHaveBeenCalledTimes(path === 'restore' ? 3 : 2);
+    });
+    mismatch.reject(new SessionListMismatch());
+    await settledLists();
+    expect(screen.queryByTestId('workspace-switcher')).toBeNull();
+    expect(screen.queryByTestId('task-board')).toBeNull();
+    spaces.reject(new ApiError(500, 'failed', 'newer ordinary failure'));
+    await settledLists();
+    expect(screen.queryByTestId('workspace-switcher')).toBeNull();
+    expect(screen.queryByTestId('task-board')).toBeNull();
+    expect(taskScreenApi.board).not.toHaveBeenCalled();
+    expect(taskData.syncRecurrences).not.toHaveBeenCalled();
+    expect(api.myNotes).toHaveBeenCalledTimes(notesBefore);
+    expect(api.me).toHaveBeenCalledTimes(path === 'restore' ? 3 : 2);
+    if (path === 'restore') expect(accountSafety.switching || accountSafety.restoring).toBe(true);
+  },
 );
 
 const pacedCases = (['notes', 'tasks', 'restore'] as const).flatMap((path) =>

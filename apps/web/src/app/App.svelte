@@ -142,7 +142,6 @@
     | {
         viewerId: string;
         sequence: number;
-        isCurrent: () => boolean;
         pending: Promise<void> | undefined;
       }
     | undefined;
@@ -464,26 +463,48 @@
     if (sessionListRecovery !== undefined) return recoverWorkspaceLists();
     const sessionAtStart = sessionSequence;
     const viewerId = currentUser.userId;
+    const safetyAtStart = accountSafety.generation;
+    let recoveryPending: Promise<void> | undefined;
+    const observe = async <T,>(read: Promise<T>): Promise<T> => {
+      try {
+        return await read;
+      } catch (error: unknown) {
+        if (
+          error instanceof SessionListMismatch &&
+          taskSessionActive &&
+          sessionAtStart === sessionSequence &&
+          viewerId === currentUser.userId &&
+          session.state === 'signed-in' &&
+          !cacheRestorePending &&
+          (!sessionHidden || accountSafety.reason === 'reauth')
+        ) {
+          sessionListRecovery ??= { viewerId, sequence: sessionAtStart, pending: undefined };
+          recoveryPending = recoverWorkspaceLists();
+        }
+        throw error;
+      }
+    };
     await workspacesReload.run(async (isCurrent) => {
       try {
         const [workspaces, organizations] = await Promise.all([
-          api.workspaces(viewerId),
-          api.myOrganizations(viewerId),
+          observe(api.workspaces(viewerId)),
+          observe(api.myOrganizations(viewerId)),
         ]);
-        if (isCurrent() && sessionAtStart === sessionSequence && session.state === 'signed-in') {
+        if (
+          isCurrent() &&
+          sessionAtStart === sessionSequence &&
+          viewerId === currentUser.userId &&
+          safetyAtStart === accountSafety.generation &&
+          sessionListRecovery === undefined &&
+          session.state === 'signed-in'
+        ) {
           session.workspaces = workspaces;
           org.load(session.me.id, organizations);
         }
       } catch (error: unknown) {
         if (!(error instanceof SessionListMismatch)) throw error;
-        if (
-          !isCurrent() ||
-          sessionAtStart !== sessionSequence ||
-          (sessionHidden && accountSafety.reason !== 'reauth')
-        )
-          return;
-        sessionListRecovery = { viewerId, sequence: sessionAtStart, isCurrent, pending: undefined };
-        await recoverWorkspaceLists();
+        // 거절 순서는 바꾸지 않고, 각 목록 관찰이 시작한 복구만 기다린다.
+        await recoveryPending;
       }
     });
   }
@@ -496,7 +517,6 @@
     const active = (): boolean =>
       taskSessionActive &&
       sessionListRecovery === recovery &&
-      recovery.isCurrent() &&
       recovery.sequence === sessionSequence &&
       currentUser.userId === recovery.viewerId &&
       session.state === 'signed-in' &&
