@@ -654,14 +654,13 @@ describe('closing the task dialog with unsaved input', () => {
     const { back } = await openBoard();
     vi.spyOn(work, 'updateTask').mockResolvedValueOnce({
       kind: 'conflict',
-      current: task('t1', { title: '그쪽 제목', version: 3 }),
+      current: { ...task('t1', { title: '그쪽 제목', version: 3 }), assignee_ids: [] },
     });
     await type('task-title', '내 제목');
     const save = document.getElementById('task-save');
     if (save === null) throw new Error('task-save');
     await fireEvent.click(save);
-    await fireEvent.click(await screen.findByRole('button', { name: m.tasks_save_mine() }));
-    await screen.findByRole('alertdialog', { name: m.tasks_clash_heading() });
+    await screen.findByRole('region', { name: m.common_conflict_heading() });
     await fireEvent.click(closeButton());
     const box = await findConfirm();
     await escape(box);
@@ -669,9 +668,14 @@ describe('closing the task dialog with unsaved input', () => {
       expect(confirmBox()).toBeNull();
     });
     expect(back).not.toHaveBeenCalled();
-    expect(screen.getByRole('alertdialog', { name: m.tasks_clash_heading() })).toBeInstanceOf(
+    expect(screen.getByRole('region', { name: m.common_conflict_heading() })).toBeInstanceOf(
       HTMLElement,
     );
+    expect(field('task-title').value).toBe('내 제목');
+    const comparison = screen.getByRole('region', { name: m.common_conflict_heading() });
+    await escape(comparison);
+    expect(screen.queryByRole('region', { name: m.common_conflict_heading() })).toBeNull();
+    expect(back).not.toHaveBeenCalled();
     expect(field('task-title').value).toBe('내 제목');
   });
 

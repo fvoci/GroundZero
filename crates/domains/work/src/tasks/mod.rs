@@ -22,7 +22,7 @@ pub use model::*;
 pub use patch::*;
 pub use read::*;
 pub use relations::*;
-pub use resource::Task;
+pub use resource::{Task, TaskConflictCurrent};
 pub use write::*;
 
 pub(crate) use relations::{load_dependency, load_series};

@@ -279,7 +279,7 @@ describe('task detail dependency kinds', () => {
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi
       .spyOn(work, 'updateTask')
-      .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, checklist: [] } })
+      .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, assignee_ids: [] } })
       .mockResolvedValue({
         kind: 'updated',
         task: { ...design, due_date: '2026-10-22', version: 2, checklist: [] },
@@ -313,10 +313,10 @@ describe('task detail dependency kinds', () => {
       .mockResolvedValue({ shifts: [], undated: [], blocked: null });
     const update = vi
       .spyOn(work, 'updateTask')
-      .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, checklist: [] } })
+      .mockResolvedValueOnce({ kind: 'shift_conflict', current: { ...design, assignee_ids: [] } })
       .mockResolvedValueOnce({
         kind: 'conflict',
-        current: { ...design, title: '남의 제목', version: 2, checklist: [] },
+        current: { ...design, title: '남의 제목', version: 2, assignee_ids: [] },
       });
     await fireEvent.input(await screen.findByLabelText('마감일'), {
       target: { value: '2026-10-22' },
@@ -330,7 +330,7 @@ describe('task detail dependency kinds', () => {
     });
     expect(update.mock.calls[1]?.[4]).toEqual([]);
     await waitFor(() => {
-      expect(document.activeElement?.id).toBe('task-save-mine');
+      expect(document.activeElement).toBe(screen.getByRole('heading', { name: '바뀐 내용 확인' }));
     });
   });
 

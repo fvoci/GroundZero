@@ -5,6 +5,7 @@ use sqlx::Connection;
 mod fixture;
 mod matrix;
 mod mutations;
+mod patch_conflict;
 mod privacy;
 mod reference;
 mod sections;

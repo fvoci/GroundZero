@@ -164,11 +164,11 @@ describe('mergeForm assignees and text', () => {
     expect(reordered.form.assignee_ids).toEqual(['u3']);
   });
 
-  // 태그는 서버가 앞뒤 공백을 떼고 겹친 것을 빼지만 받은 순서는 지킨다(tasks.rs validate_tags). 순서도 값이다.
-  it('keeps comparing tags in order', () => {
+  // #180 승인: 저장 순서는 유지하지만 충돌 선택은 태그 집합 하나다.
+  it('compares tags as one set (#180 approved 6568773043)', () => {
     expect(
       mergeForm(base, { ...base, tags: ['a', 'b'] }, { ...base, tags: ['b', 'a'] }).clashes,
-    ).toEqual(['tags']);
+    ).toEqual([]);
   });
 
   // 제목·설명은 서버가 앞뒤 공백을 떼고 저장한다: 서버 값과 앞뒤 공백만 다른 내 값은 겹친 것이 아니다(묻는 화면에서 두

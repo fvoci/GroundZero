@@ -1,6 +1,7 @@
 import type { components, StatusCategory } from '@fvoci/api-client';
 type Schemas = components['schemas'];
 export type TaskResource = Schemas['Task'];
+export type TaskConflictCurrent = Schemas['TaskConflictCurrent'];
 export type TaskAssignee = Schemas['TaskAssignee'];
 export type TaskDependency = Schemas['TaskDependency'];
 export type ChecklistItem = Schemas['ChecklistItem'];

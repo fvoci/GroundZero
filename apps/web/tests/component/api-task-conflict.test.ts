@@ -1,4 +1,5 @@
 import { workApi as work, WorkRuleConflict } from '$lib/features/tasks/api';
+import { taskData } from '$lib/features/tasks/detail-data';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TaskInput } from '$lib/api/client';
@@ -29,6 +30,7 @@ const task = {
   series: null,
   occurrence_date: null,
   assignees: [],
+  assignee_ids: [],
   status_category: 'todo',
   checklist_done: 0,
   checklist_total: 0,
@@ -91,6 +93,16 @@ afterEach(() => {
 });
 
 describe('task update conflicts', () => {
+  it('retains current assignee ids from the 409 without any follow-up GET', async () => {
+    const seen = reply(409, {
+      error: 'conflict',
+      current: { ...task, assignee_ids: ['person-b'] },
+      changed: ['assignee_ids'],
+    });
+    const result = await taskData.updateTask('user-a', 'b', 2, input).catch(() => undefined);
+    expect(seen.map((s) => s.method)).toEqual(['PATCH']);
+    expect(result).toMatchObject({ kind: 'conflict', current: { assignee_ids: ['person-b'] } });
+  });
   it('retains field validation metadata for a rejected title without retrying', async () => {
     const seen = reply(400, {
       error: 'bad_request',

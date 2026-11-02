@@ -17,7 +17,7 @@ use super::model::{
     EXPECTED_TASK_USER_DOC, MAX_DESCRIPTION_CHARS, SuccessorShift, TaskPriority, check_estimate,
     validate_status, validate_tags,
 };
-use super::resource::{Task, load_task};
+use super::resource::{Task, TaskConflictCurrent, load_conflict, load_task};
 use crate::state::WorkState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::UserId;
@@ -83,6 +83,14 @@ where
 #[serde(untagged)]
 pub enum TaskPatchConflict {
     Stale(Box<StaleWrite<Task>>),
+    State(ErrorBody),
+}
+
+/// PATCH 전용 409. 이동 충돌은 기존 `TaskPatchConflict`와 일반 Task를 유지한다.
+#[derive(Debug, Serialize, ToSchema)]
+#[serde(untagged)]
+pub enum TaskFieldConflict {
+    Stale(Box<StaleWrite<TaskConflictCurrent>>),
     State(ErrorBody),
 }
 
@@ -155,6 +163,19 @@ fn merge(
     if let Some(milestone) = input.milestone {
         note("milestone", milestone.into());
     }
+    if let Some(ids) = &input.assignee_ids {
+        let mut ids = ids.clone();
+        ids.sort_by_key(|id| id.0);
+        ids.dedup();
+        note(
+            "assignee_ids",
+            Value::Array(
+                ids.into_iter()
+                    .map(|id| Value::from(id.0.to_string()))
+                    .collect(),
+            ),
+        );
+    }
     let edit = Edit {
         title,
         description,
@@ -189,7 +210,7 @@ fn date_of(
            ("x-fvoci-expected-user" = String, Header, format = Uuid, description = EXPECTED_TASK_USER_DOC)), request_body = PatchTask,
     responses((status = 200, body = Task), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody),
-              (status = 409, body = TaskPatchConflict, description = "conflict·shift_conflict면 StaleWrite(지금 업무와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")),
+              (status = 409, body = TaskFieldConflict, description = "conflict·shift_conflict면 StaleWrite(같은 스냅샷의 업무·판·담당 ID와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음")),
     tag = "tasks")]
 pub async fn patch(
     State(state): State<WorkState>,
@@ -220,23 +241,22 @@ pub async fn patch(
     )
     .await?;
     let mut tx = state.db.begin_as(user).await?;
-    let latest = load_task(&mut tx, id).await?;
-    tx.commit().await?;
-    Ok(match saved {
-        Saved::Updated => Json(latest).into_response(),
-        Saved::Conflict => StaleWrite::new(
-            "conflict",
-            "the task changed after this edit started; nothing was saved",
-            latest,
-            &sent,
-        )
-        .into_response(),
-        Saved::ShiftConflict => StaleWrite::new(
+    let (code, message) = match saved {
+        Saved::Updated => {
+            let latest = load_task(&mut tx, id).await?;
+            tx.commit().await?;
+            return Ok(Json(latest).into_response());
+        }
+        Saved::ShiftConflict => (
             "shift_conflict",
             "the approved successor shifts no longer match; nothing was saved",
-            latest,
-            &sent,
-        )
-        .into_response(),
-    })
+        ),
+        Saved::Conflict => (
+            "conflict",
+            "the task changed after this edit started; nothing was saved",
+        ),
+    };
+    let latest = load_conflict(&mut tx, id).await?;
+    tx.commit().await?;
+    Ok(StaleWrite::new(code, message, latest, &sent).into_response())
 }

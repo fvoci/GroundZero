@@ -9,7 +9,7 @@ use uuid::Uuid;
 use super::model::TaskPriority;
 use crate::task_statuses::StatusCategory;
 use fvoci_core::error::AppError;
-use fvoci_core::ids::{ItemId, ModuleId, WorkspaceId};
+use fvoci_core::ids::{ItemId, ModuleId, UserId, WorkspaceId};
 use fvoci_core::validate::format_date;
 use fvoci_db::UserTx;
 
@@ -55,6 +55,22 @@ pub struct Task {
     #[serde(with = "time::serde::rfc3339")]
     #[schema(value_type = String, format = DateTime)]
     pub updated_at: OffsetDateTime,
+}
+
+/// PATCH 판 충돌의 비교용 현재 값. 일반 업무 자원·목록에는 담당을 추가하지 않는다(#180).
+#[derive(Debug, Serialize, ToSchema)]
+pub struct TaskConflictCurrent {
+    #[serde(flatten)]
+    pub task: Task,
+    /// 같은 statement snapshot에서 읽은 담당자 전체 집합(id 순).
+    pub assignee_ids: Vec<UserId>,
+}
+
+#[derive(Debug, sqlx::FromRow)]
+struct ConflictRecord {
+    #[sqlx(flatten)]
+    task: TaskRecord,
+    assignee_ids: Vec<UserId>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -130,6 +146,26 @@ pub(crate) async fn load_task(tx: &mut UserTx, id: Uuid) -> Result<Task, AppErro
         .fetch_optional(tx.conn())
         .await?;
     row.ok_or(AppError::NotFound)?.try_into()
+}
+
+/// 업무 칸·판·담당을 한 문장으로 읽는다. 바깥 업무와 담당 관계 모두 같은 앱 역할의 RLS를 따른다.
+pub(super) async fn load_conflict(
+    tx: &mut UserTx,
+    id: Uuid,
+) -> Result<TaskConflictCurrent, AppError> {
+    let row: Option<ConflictRecord> = sqlx::query_as(&format!(
+        "SELECT task.*, ARRAY(SELECT a.user_id FROM task_assignees a
+         WHERE a.task_id = task.id ORDER BY a.user_id) AS assignee_ids
+         FROM ({TASK_SELECT} WHERE t.id = $1) task"
+    ))
+    .bind(id)
+    .fetch_optional(tx.conn())
+    .await?;
+    let row = row.ok_or(AppError::NotFound)?;
+    Ok(TaskConflictCurrent {
+        task: row.task.try_into()?,
+        assignee_ids: row.assignee_ids,
+    })
 }
 
 /// 항목의 업무를 칸반 열·위치·번호 순서로 읽는다.
