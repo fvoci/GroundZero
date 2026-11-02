@@ -211,6 +211,7 @@ async fn a_stale_patch_changes_nothing_and_names_the_fields_that_differ() {
     assert_eq!(conflict["changed"], json!(["due_date", "title"]));
     assert_eq!(conflict["current"]["title"], "다른 탭");
     assert_eq!(conflict["current"]["version"], first["version"]);
+    assert_eq!(conflict["current"]["assignee_ids"], json!([]));
     let now = stored(&app, &admin, id).await;
     assert_eq!(
         (
@@ -290,5 +291,43 @@ async fn a_patch_moves_the_approved_successors_in_the_same_save() {
     assert_eq!(
         stored(&app, &admin, b_id).await["version"],
         b_now["version"]
+    );
+}
+
+#[tokio::test]
+async fn a_stale_assignee_patch_returns_current_ids_without_changing_them() {
+    let state = common::state();
+    let app = common::app(&state);
+    let owner = login(&state, "patch-assignees").await;
+    let ws = create_workspace(&app, &owner, "담당 충돌").await;
+    let item = project_item(&app, &owner, &ws).await;
+    let task = new_task(&app, &owner, &item, json!({ "title": "담당 확인" })).await;
+    let id = task["id"].as_str().unwrap();
+    let (status, first) = patch(
+        &app,
+        &owner,
+        id,
+        json!({ "base_version": task["version"], "assignee_ids": [owner.id.0] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert!(
+        first.get("assignee_ids").is_none(),
+        "ordinary Task stays unchanged"
+    );
+    let (status, conflict) = patch(
+        &app,
+        &owner,
+        id,
+        json!({ "base_version": task["version"], "assignee_ids": [] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{conflict}");
+    assert_eq!(conflict["current"]["assignee_ids"], json!([owner.id.0]));
+    assert_eq!(conflict["current"]["version"], first["version"]);
+    assert_eq!(conflict["changed"], json!(["assignee_ids"]));
+    assert_eq!(
+        common::task_snapshot(&app, &owner, id).await["assignees"][0]["user_id"],
+        json!(owner.id.0)
     );
 }

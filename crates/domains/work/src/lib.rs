@@ -86,6 +86,8 @@ pub use state::WorkState;
         tasks::TaskDependency,
         tasks::PatchTask,
         tasks::TaskPatchConflict,
+        tasks::TaskFieldConflict,
+        tasks::TaskConflictCurrent,
         tasks::CreateTask,
         tasks::MoveTask,
         tasks::SetTaskParent,

@@ -5634,6 +5634,25 @@ export interface components {
             request_id?: string;
         };
         /** @description 판 충돌 409 본문. */
+        StaleWrite_TaskConflictCurrent: {
+            /**
+             * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
+             *     않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다.
+             */
+            changed: string[];
+            /** @description PATCH 판 충돌의 비교용 현재 값. 일반 업무 자원·목록에는 담당을 추가하지 않는다(#180). */
+            current: components["schemas"]["Task"] & {
+                /** @description 같은 statement snapshot에서 읽은 담당자 전체 집합(id 순). */
+                assignee_ids: components["schemas"]["UserId"][];
+            };
+            /** @description 충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다. */
+            error: string;
+            /** @description 사람이 읽는 영어 진단 문구. */
+            message: string;
+            /** @description 이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83). */
+            request_id?: string;
+        };
+        /** @description 판 충돌 409 본문. */
         StaleWrite_TimeEntry: {
             /**
              * @description 요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지
@@ -5860,6 +5879,11 @@ export interface components {
             tasks: components["schemas"]["ScreenTask"][];
             viewer_id: components["schemas"]["UserId"];
         };
+        /** @description PATCH 판 충돌의 비교용 현재 값. 일반 업무 자원·목록에는 담당을 추가하지 않는다(#180). */
+        TaskConflictCurrent: components["schemas"]["Task"] & {
+            /** @description 같은 statement snapshot에서 읽은 담당자 전체 집합(id 순). */
+            assignee_ids: components["schemas"]["UserId"][];
+        };
         TaskContextRead: {
             documents: components["schemas"]["ScreenDocument"][];
             item: components["schemas"]["ScreenItem"];
@@ -5893,6 +5917,8 @@ export interface components {
             tasks: components["schemas"]["ScreenTask"][];
             viewer_id: components["schemas"]["UserId"];
         };
+        /** @description PATCH 전용 409. 이동 충돌은 기존 `TaskPatchConflict`와 일반 Task를 유지한다. */
+        TaskFieldConflict: components["schemas"]["StaleWrite_TaskConflictCurrent"] | components["schemas"]["ErrorBody"];
         /** @description `PATCH`의 409 본문(계약 문서용). 판 충돌이면 `StaleWrite<Task>`, 기대 사용자 불일치·보관·동시 변경이면 `ErrorBody`. */
         TaskPatchConflict: components["schemas"]["StaleWrite_Task"] | components["schemas"]["ErrorBody"];
         /**
@@ -13662,13 +13688,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description conflict·shift_conflict면 StaleWrite(지금 업무와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음 */
+            /** @description conflict·shift_conflict면 StaleWrite(같은 스냅샷의 업무·판·담당 ID와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TaskPatchConflict"];
+                    "application/json": components["schemas"]["TaskFieldConflict"];
                 };
             };
         };

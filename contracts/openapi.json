@@ -11412,11 +11412,11 @@
             }
           },
           "409": {
-            "description": "conflict·shift_conflict면 StaleWrite(지금 업무와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
+            "description": "conflict·shift_conflict면 StaleWrite(같은 스냅샷의 업무·판·담당 ID와 바뀐 칸); account_changed·invalid_state면 ErrorBody. 아무것도 바꾸지 않음",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TaskPatchConflict"
+                  "$ref": "#/components/schemas/TaskFieldConflict"
                 }
               }
             }
@@ -23615,6 +23615,60 @@
           }
         }
       },
+      "StaleWrite_TaskConflictCurrent": {
+        "type": "object",
+        "description": "판 충돌 409 본문.",
+        "required": [
+          "error",
+          "message",
+          "current",
+          "changed"
+        ],
+        "properties": {
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "요청이 바꾸려던 칸 가운데 `current`의 값과 다른 칸 이름(요청 본문의 칸 이름, 이름 순). `current`에 없는 칸은 보지\n않는다. 비어 있으면 판만 지났고 보낸 칸의 값은 지금과 같다."
+          },
+          "current": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Task"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "assignee_ids"
+                ],
+                "properties": {
+                  "assignee_ids": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/UserId"
+                    },
+                    "description": "같은 statement snapshot에서 읽은 담당자 전체 집합(id 순)."
+                  }
+                }
+              }
+            ],
+            "description": "PATCH 판 충돌의 비교용 현재 값. 일반 업무 자원·목록에는 담당을 추가하지 않는다(#180)."
+          },
+          "error": {
+            "type": "string",
+            "description": "충돌 종류(예: 업무 `conflict`·`shift_conflict`). 오류 본문(`ErrorBody`)의 `error`와 같은 자리다."
+          },
+          "message": {
+            "type": "string",
+            "description": "사람이 읽는 영어 진단 문구."
+          },
+          "request_id": {
+            "type": "string",
+            "description": "이 요청의 id(응답 머리글 `x-request-id`와 같다, D-83)."
+          }
+        }
+      },
       "StaleWrite_TimeEntry": {
         "type": "object",
         "description": "판 충돌 409 본문.",
@@ -24255,6 +24309,29 @@
           }
         }
       },
+      "TaskConflictCurrent": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Task"
+          },
+          {
+            "type": "object",
+            "required": [
+              "assignee_ids"
+            ],
+            "properties": {
+              "assignee_ids": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/UserId"
+                },
+                "description": "같은 statement snapshot에서 읽은 담당자 전체 집합(id 순)."
+              }
+            }
+          }
+        ],
+        "description": "PATCH 판 충돌의 비교용 현재 값. 일반 업무 자원·목록에는 담당을 추가하지 않는다(#180)."
+      },
       "TaskContextRead": {
         "type": "object",
         "required": [
@@ -24390,6 +24467,17 @@
             "$ref": "#/components/schemas/UserId"
           }
         }
+      },
+      "TaskFieldConflict": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/StaleWrite_TaskConflictCurrent"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorBody"
+          }
+        ],
+        "description": "PATCH 전용 409. 이동 충돌은 기존 `TaskPatchConflict`와 일반 Task를 유지한다."
       },
       "TaskPatchConflict": {
         "oneOf": [
