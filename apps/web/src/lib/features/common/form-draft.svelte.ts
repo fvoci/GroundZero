@@ -180,45 +180,48 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     persist();
   }
 
+  /** Move this tab's typed input into an offer. False when no durable copy could be kept. */
+  function holdTyped(): boolean {
+    if (session === undefined) return false;
+    const expected = JSON.stringify(storedSnapshot());
+    if (!persist()) return false;
+    const typed = listFormDrafts(
+      session.name,
+      (raw): Saved<T> | undefined => {
+        if (
+          typeof raw !== 'object' ||
+          raw === null ||
+          !('savedAt' in raw) ||
+          typeof raw.savedAt !== 'string' ||
+          !('input' in raw)
+        )
+          return undefined;
+        if (JSON.stringify(raw.input) !== expected) return undefined;
+        const input = options.parse(raw.input);
+        return input === undefined ? undefined : { savedAt: raw.savedAt, input };
+      },
+      session.userId,
+    ).find((candidate) => candidate.key === session?.key);
+    if (typed === undefined) {
+      // No durable copy was possible: retain the live input until it is discarded.
+      kept = false;
+      return false;
+    }
+    const held =
+      options.retainSource === true ? typed : holdFormDraft(session.name, typed, session.userId);
+    if (options.retainSource === true) {
+      session.key = `${session.key ?? ''}-${crypto.randomUUID()}`;
+    }
+    if (held.key === session.key) return false;
+    offers = [...offers, held];
+    return true;
+  }
+
   function restore(entry: StoredFormDraft<Saved<T>>): void {
     if (!current() || !offers.includes(entry)) return;
     // Restoring an older offer must also preserve newly typed input.
-    if (options.dirty() && session !== undefined && entry.key !== session.key) {
-      const expected = JSON.stringify(storedSnapshot());
-      if (!persist()) return;
-      const typed = listFormDrafts(
-        session.name,
-        (raw): Saved<T> | undefined => {
-          if (
-            typeof raw !== 'object' ||
-            raw === null ||
-            !('savedAt' in raw) ||
-            typeof raw.savedAt !== 'string' ||
-            !('input' in raw)
-          )
-            return undefined;
-          if (JSON.stringify(raw.input) !== expected) return undefined;
-          const input = options.parse(raw.input);
-          return input === undefined ? undefined : { savedAt: raw.savedAt, input };
-        },
-        session.userId,
-      ).find((candidate) => candidate.key === session?.key);
-      if (typed !== undefined) {
-        const held =
-          options.retainSource === true
-            ? typed
-            : holdFormDraft(session.name, typed, session.userId);
-        if (options.retainSource === true) {
-          session.key = `${session.key ?? ''}-${crypto.randomUUID()}`;
-        }
-        if (held.key === session.key) return;
-        offers = [...offers, held];
-      } else {
-        // No durable copy was possible: retain the live input until it is discarded.
-        kept = false;
-        return;
-      }
-    }
+    if (options.dirty() && session !== undefined && entry.key !== session.key && !holdTyped())
+      return;
     // B: keep the offered source for another proposal, even after a successful copy or completion.
     options.restore(entry.value.input);
     const value =
@@ -230,6 +233,18 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     persist();
   }
 
+  /**
+   * The form was hidden because editing is no longer allowed (#289). Long input keeps its stored copy as an
+   * offer, and the live input returns to its empty state so it no longer warns (D-27). A sent request stays
+   * locked until its response; call again afterwards. Without a durable copy the input stays and still warns.
+   */
+  function shelve(): void {
+    if (!current() || options.busy?.() === true) return;
+    if (options.dirty() && !holdTyped()) return;
+    options.reset();
+    leave.keep();
+  }
+
   function capture(): FormDraftAttempt | undefined {
     if (!current() || session === undefined || blocked()) return undefined;
     persist();
@@ -238,6 +253,16 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
 
   function isOwner(attempt: FormDraftAttempt): boolean {
     return current() && attempt.session === session;
+  }
+
+  /**
+   * Whether this attempt's finished request may release the form's send lock (#313). Unlike `isOwner`, it holds
+   * while the account is being checked: a same-user check ends without remounting, so a lock kept then would stay.
+   * Another user or target replaces `session`, so a late response never unlocks a newer request (D-96). Results
+   * (clearing input, moving, showing errors) still go through `isOwner`/`isCurrent`/`complete`.
+   */
+  function lockedBy(attempt: FormDraftAttempt): boolean {
+    return !disposed && attempt.session === session;
   }
 
   function isCurrent(attempt: FormDraftAttempt): boolean {
@@ -299,10 +324,12 @@ export function createFormDraft<T>(options: DraftOptions<T>) {
     leave,
     persist,
     restore,
+    shelve,
     discard,
     discardAndLeave,
     capture,
     isOwner,
+    lockedBy,
     isCurrent,
     complete,
     attach,

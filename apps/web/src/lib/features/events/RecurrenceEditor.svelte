@@ -5,7 +5,12 @@
   import { onDestroy, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
-  import { parseRuleDraft, type RuleDraft } from './input-drafts';
+  import {
+    parseRuleDraft,
+    type RuleDraft,
+    type RuleRawDraft,
+    type RuleComparison,
+  } from './input-drafts';
   import { ApiError, FREQUENCIES } from '$lib/api/client';
   import { notifyDone } from '$lib/features/feedback/feedback.svelte';
   import { errorText, untilBeforeStart } from '$lib/api/errors';
@@ -16,6 +21,13 @@
   import { Label } from '$lib/ui/label';
   import * as Select from '$lib/ui/select';
 
+  import FieldConflict from '$lib/features/common/FieldConflict.svelte';
+  import {
+    fieldDifferences,
+    initialFieldChoices,
+    selectedFields,
+  } from '$lib/features/common/field-conflict';
+  import { ruleConflictFields, sameRule, type RuleValue } from './conflict';
   import { describeRule, ISO_WEEKDAYS, weekdayLabel } from './labels';
 
   interface Props {
@@ -32,6 +44,8 @@
     untilError?: string | undefined;
     /** 부모가 저장하는 동안 잠근다(반복 Select, 아래 주석). */
     disabled?: boolean;
+    conflictRule?: (cause: unknown) => RuleValue | undefined;
+    oncomparison?: (open: boolean) => void;
   }
 
   const {
@@ -46,6 +60,8 @@
     ondraftkept,
     onsaving,
     disabled = false,
+    conflictRule,
+    oncomparison,
   }: Props = $props();
 
   const FREQ_LABEL: Record<Frequency | 'none', string> = {
@@ -66,7 +82,7 @@
     },
   };
 
-  function initial(): {
+  function initial(value: RecurrenceRule | null = rule): {
     freq: Frequency | 'none';
     interval: string;
     weekdays: number[];
@@ -75,12 +91,12 @@
     count: string;
   } {
     return {
-      freq: rule?.freq ?? 'none',
-      interval: String(rule?.interval ?? 1),
-      weekdays: rule?.weekdays ?? [],
-      end: rule?.count != null ? 'count' : rule?.until != null ? 'until' : 'never',
-      until: rule?.until ?? '',
-      count: String(rule?.count ?? 10),
+      freq: value?.freq ?? 'none',
+      interval: String(value?.interval ?? 1),
+      weekdays: value?.weekdays ?? [],
+      end: value?.count != null ? 'count' : value?.until != null ? 'until' : 'never',
+      until: value?.until ?? '',
+      count: String(value?.count ?? 10),
     };
   }
 
@@ -91,15 +107,28 @@
   let conflicted = $state(false);
   let baseFields = $state(initial());
   let baseRule = $state.raw(untrack(() => rule));
-  const dirty = $derived(JSON.stringify(f) !== JSON.stringify(baseFields));
+  let comparison = $state<RuleComparison>();
+  const fields = $derived(ruleConflictFields());
+  const dirty = $derived(
+    comparison !== undefined || JSON.stringify(f) !== JSON.stringify(baseFields),
+  );
+  function rawSnapshot(): RuleRawDraft {
+    return $state.snapshot({ fields: f, baseFields, base: baseRule });
+  }
+  function restoreInput(value: RuleRawDraft): void {
+    Object.assign(f, value.fields);
+    baseFields = value.baseFields;
+    baseRule = value.base;
+    error = undefined;
+    conflicted = false;
+  }
   const draft = createFormDraft<RuleDraft>({
     name: () => draftName,
-    snapshot: () => ({ fields: { ...f, weekdays: [...f.weekdays] }, baseFields, base: baseRule }),
+    snapshot: () => ({ ...rawSnapshot(), comparison }),
     parse: parseRuleDraft,
     restore: (value) => {
-      Object.assign(f, value.fields);
-      baseFields = value.baseFields;
-      baseRule = value.base;
+      restoreInput(value);
+      comparison = value.comparison;
     },
     reset: () => {
       Object.assign(f, initial());
@@ -108,6 +137,7 @@
       error = undefined;
       busy = false;
       conflicted = false;
+      comparison = undefined;
       localUntilError = undefined;
     },
     dirty: () => dirty,
@@ -125,11 +155,13 @@
   }
   $effect(() => {
     onunsaved?.(dirty);
+    oncomparison?.(comparison?.open === true);
     ondraftkept?.(draft.kept);
     onsaving?.(busy);
   });
   onDestroy(() => {
     onunsaved?.(false);
+    oncomparison?.(false);
     ondraftkept?.(true);
     onsaving?.(false);
   });
@@ -155,9 +187,9 @@
     };
   }
 
-  async function save(event: SubmitEvent): Promise<void> {
-    event.preventDefault();
-    if (busy || !canEdit) return;
+  async function save(event?: SubmitEvent, selected = false): Promise<void> {
+    event?.preventDefault();
+    if (busy || disabled || !canEdit) return;
     const attempt = draftName === undefined ? undefined : draft.capture();
     if (draftName !== undefined && attempt === undefined) return;
     error = undefined;
@@ -168,21 +200,42 @@
       return;
     }
     busy = true;
+    const raw = rawSnapshot();
     const savedFields = { ...f, weekdays: [...f.weekdays] };
     try {
-      await onsave(proposed, baseRule);
+      if (!(selected && comparison !== undefined && sameRule(proposed, comparison.server.rule)))
+        await onsave(proposed, baseRule);
       if (attempt !== undefined && !draft.complete(attempt)) return;
       Object.assign(f, savedFields);
       baseFields = savedFields;
       baseRule = proposed;
       draft.persist();
       conflicted = false;
+      comparison = undefined;
       notifyDone(m.common_saved());
     } catch (e: unknown) {
       if (attempt !== undefined && !draft.isOwner(attempt)) return;
+      const current = conflictRule?.(e);
+      if (current !== undefined) {
+        const old = comparison;
+        comparison = {
+          base: { rule: baseRule },
+          mine: { rule: proposed },
+          server: current,
+          mineDraft: raw,
+          original: old?.original ?? raw,
+          choices: initialFieldChoices(
+            fieldDifferences(fields, { rule: baseRule }, { rule: proposed }, current),
+          ),
+          open: true,
+          repeated: old !== undefined,
+        };
+        return;
+      }
       // #76: 반복 끝이 첫 회차보다 앞서면 반복 끝 칸 옆에 구체 이유를 보인다.
       if (untilBeforeStart(e)) {
         localUntilError = m.events_until_before_start();
+        error = comparison?.open === true ? localUntilError : undefined;
         return;
       }
       conflicted = e instanceof ApiError && e.code === 'rule_conflict';
@@ -193,8 +246,28 @@
           ? m.events_rule_changed_meanwhile()
           : errorText(e, m.events_recurrence_save_failed());
     } finally {
-      if (attempt === undefined || draft.isOwner(attempt)) busy = false;
+      if (attempt === undefined || draft.lockedBy(attempt)) busy = false;
     }
+  }
+  export function cancelComparison(original = false): void {
+    if (comparison?.open !== true || busy) return;
+    restoreInput($state.snapshot(original ? comparison.original : comparison.mineDraft));
+    comparison.open = false;
+  }
+  async function applyChoices(saveNow: boolean): Promise<void> {
+    const ask = comparison;
+    if (ask?.open !== true || busy || disabled || !canEdit) return;
+    const candidate = selectedFields(
+      fields,
+      $state.snapshot(ask.mine),
+      $state.snapshot(ask.server),
+      ask.choices,
+    );
+    Object.assign(f, initial(candidate.rule));
+    baseFields = initial(candidate.rule);
+    baseRule = $state.snapshot(ask.server.rule);
+    if (saveNow) await save(undefined, true);
+    else ask.open = false;
   }
 </script>
 
@@ -217,8 +290,34 @@
   <p class="text-sm text-muted-foreground">
     {rule === null ? m.events_no_recurrence() : describeRule(rule)} ({zoneNote})
   </p>
-  {#if canEdit && (draftName === undefined || draft.active)}
-    <fieldset class="min-w-0" disabled={busy}>
+  {#if comparison?.open}
+    <FieldConflict
+      {fields}
+      base={comparison.base}
+      mine={comparison.mine}
+      server={comparison.server}
+      bind:choices={comparison.choices}
+      busy={busy || disabled}
+      blocked={!canEdit}
+      repeated={comparison.repeated}
+      onsave={() => void applyChoices(true)}
+      onedit={() => void applyChoices(false)}
+      oncancel={() => {
+        cancelComparison();
+      }}
+      onoriginal={JSON.stringify(comparison.original) !== JSON.stringify(comparison.mineDraft)
+        ? () => {
+            cancelComparison(true);
+          }
+        : undefined}
+    />
+  {/if}
+  {#if (canEdit || comparison !== undefined) && (draftName === undefined || draft.active)}
+    <fieldset
+      class="min-w-0"
+      disabled={busy || disabled || !canEdit}
+      inert={comparison?.open === true}
+    >
       <form class="flex flex-wrap items-end gap-3" onsubmit={(e) => void save(e)}>
         <div class="flex flex-col gap-1">
           <span class="text-sm font-medium" id={`${idPrefix}-freq-label`}

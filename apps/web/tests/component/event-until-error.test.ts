@@ -1,3 +1,4 @@
+import { eventRead } from './fixtures/event-read';
 import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen } from '@testing-library/svelte';
 import { afterEach, expect, it, vi } from 'vitest';
@@ -12,7 +13,7 @@ it.each(['ko', 'en'] as const)(
   'places the real until rejection next to the end field (%s)',
   async (locale) => {
     await setLocale(locale, { reload: false });
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(recurring);
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(recurring));
     vi.spyOn(eventsApi, 'updateEvent').mockRejectedValue(
       new ApiError(
         400,

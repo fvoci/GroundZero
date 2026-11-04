@@ -15,7 +15,7 @@ use crate::http::AppState;
 use fvoci_core::error::{AppError, ErrorBody};
 use fvoci_core::ids::{ItemId, ModuleId, UserId};
 use fvoci_db::{UserTx, is_unique_violation, needed_ids, new_ids};
-use fvoci_http::session::CurrentUser;
+use fvoci_http::session::{CurrentUser, EXPECTED_USER_IF_SENT_DOC};
 
 time::serde::format_description!(day, Date, "[year]-[month]-[day]");
 
@@ -311,10 +311,11 @@ async fn load(tx: &mut UserTx, item: ItemId) -> Result<ItemProfile, AppError> {
 /// 항목 정보 바꾸기(쓸 수 있는 사람). 종류에 없는 칸은 400, 리더는 그 항목을 볼 수 있는 사람이어야 한다. 연 판이
 /// 지났으면 아무것도 바꾸지 않고 409와 서버 최신본(`ItemProfileConflict`), 보관된 항목은 409 `invalid_state`.
 #[utoipa::path(put, path = "/api/items/{item_id}/profile", operation_id = "set_item_profile",
-    params(("item_id" = String, Path, format = Uuid)), request_body = SetItemProfile,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetItemProfile,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ItemProfileSaveConflict,
-               description = "`conflict`면 ItemProfileConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
+               description = "`conflict`면 ItemProfileConflict(서버 최신본 포함), 보관된 항목·동시 변경 재시도면 ErrorBody(`invalid_state`), 보낸 기대 사용자가 세션과 다르면 ErrorBody(`account_changed`). 어느 쪽도 아무것도 바꾸지 않았다")), tag = "modules")]
 pub async fn set(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -368,7 +369,8 @@ pub async fn set(
 
 /// 항목 멤버 정하기(항목 소유 권한자). 비공개 항목은 멤버만 워크스페이스 역할 안에서 본다(D-20 공유).
 #[utoipa::path(put, path = "/api/items/{item_id}/members", operation_id = "set_item_members",
-    params(("item_id" = String, Path, format = Uuid)), request_body = SetItemMembers,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetItemMembers,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn set_members(
@@ -398,9 +400,10 @@ pub async fn set_members(
 
 /// 모듈 아이콘 바꾸기(관리자). 빈 값이면 지운다.
 #[utoipa::path(put, path = "/api/modules/{module_id}/icon", operation_id = "set_module_icon",
-    params(("module_id" = String, Path, format = Uuid)), request_body = SetModuleIcon,
+    params(("module_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetModuleIcon,
     responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
-              (status = 404, body = ErrorBody)), tag = "modules")]
+              (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn set_module_icon(
     State(state): State<AppState>,
     CurrentUser(user): CurrentUser,
@@ -480,7 +483,8 @@ pub struct SetTemplate {
 /// 항목 복제(볼 수 있는 사람, 대상 모듈에 항목을 만들 수 있어야 함). 담당자·반복 규칙·기록·첨부·진도는 옮기지
 /// 않는다. 복제를 허용하지 않은 문서는 건너뛴다(D-20).
 #[utoipa::path(post, path = "/api/items/{item_id}/copy", operation_id = "copy_item",
-    params(("item_id" = String, Path, format = Uuid)), request_body = CopyItem,
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = CopyItem,
     responses((status = 201, body = CopiedItem), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody),
               (status = 404, body = ErrorBody), (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn copy(
@@ -529,8 +533,9 @@ pub async fn copy(
 
 /// 템플릿 표시·해제(쓸 수 있는 사람).
 #[utoipa::path(put, path = "/api/items/{item_id}/template", operation_id = "set_item_template",
-    params(("item_id" = String, Path, format = Uuid)), request_body = SetTemplate,
-    responses((status = 204), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
+    params(("item_id" = String, Path, format = Uuid),
+           ("x-fvoci-expected-user" = Option<String>, Header, format = Uuid, description = EXPECTED_USER_IF_SENT_DOC)), request_body = SetTemplate,
+    responses((status = 204), (status = 400, body = ErrorBody), (status = 403, body = ErrorBody), (status = 404, body = ErrorBody),
               (status = 409, body = ErrorBody)), tag = "modules")]
 pub async fn set_template(
     State(state): State<AppState>,

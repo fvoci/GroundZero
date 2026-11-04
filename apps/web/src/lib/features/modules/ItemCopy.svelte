@@ -146,7 +146,7 @@
       if (attempt === undefined || !draft.isCurrent(attempt)) return;
       error = errorText(err, m.modules_copy_failed());
     } finally {
-      if (attempt !== undefined && draft.isOwner(attempt)) busy = false;
+      if (attempt !== undefined && draft.lockedBy(attempt)) busy = false;
     }
   }
 </script>

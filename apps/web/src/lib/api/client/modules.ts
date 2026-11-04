@@ -1,4 +1,4 @@
-import { request, expectOk, fail } from '$lib/shared/api';
+import { EXPECTED_USER, request, expectOk, fail } from '$lib/shared/api';
 import {
   access,
   bool,
@@ -159,20 +159,27 @@ export function parseItemProfile(value: Json): ItemProfileView {
   };
 }
 
-/**
- * 편집·초안을 시작한 사용자 id를 서버에 알리는 머리. 서버는 세션의 사용자와 비교만 하고
- * 권한은 세션으로만 정한다.
- */
-/** 판 충돌 409가 함께 보낸 서버 최신본(`current`). 판 충돌이 아닌 409(보관 등)와 다른 응답은 undefined다. */
+/** 판 충돌 409가 함께 보낸 서버 최신본(`current`). 판 충돌이 아닌 409(보관·account_changed 등)와 다른 응답은 undefined다. */
 function versionConflict(status: number, json: Json): unknown {
   if (status !== 409 || !isRecord(json) || json.current === undefined) return undefined;
   return json.current;
 }
 
+/**
+ * 편집을 시작한 화면의 사용자 id를 서버에 알리는 머리(D-96, #307). 서버는 세션의 사용자와 비교만 하고(다르면 아무것도
+ * 바꾸지 않고 409 `account_changed`) 권한은 세션으로만 정한다. 빈 값(로그인 확인 전)은 보내지 않는다.
+ */
+function startedBy(expectedUser: string): Record<string, string> {
+  return expectedUser === '' ? {} : { [EXPECTED_USER]: expectedUser };
+}
+
 export const modulesApi = {
   itemProfile: (itemId: string) =>
     expectOk('GET', `/api/items/${encodeURIComponent(itemId)}/profile`, parseItemProfile),
-  /** 항목 정보 고치기. 연 때의 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
+  /**
+   * 항목 정보 고치기. 연 때의 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104).
+   * `expectedUser`는 편집을 연 사용자다(D-96). 세션의 사용자와 다르면 409 `account_changed`로 계정 전환을 시작한다.
+   */
   setItemProfile: async (
     itemId: string,
     baseVersion: number,
@@ -185,11 +192,13 @@ export const modulesApi = {
       status: ItemStatus;
       details: ItemDetailsView;
     },
+    expectedUser: string,
   ): Promise<{ kind: 'saved' } | { kind: 'conflict'; current: ItemProfileView }> => {
     const { status, json } = await request(
       'PUT',
       `/api/items/${encodeURIComponent(itemId)}/profile`,
       { base_version: baseVersion, ...profile, details: { ...profile.details } },
+      startedBy(expectedUser),
     );
     const current = versionConflict(status, json);
     if (current !== undefined) return { kind: 'conflict', current: parseItemProfile(current) };
@@ -250,17 +259,23 @@ export const modulesApi = {
       title,
     }),
   item: (id: string) => expectOk('GET', `/api/items/${encodeURIComponent(id)}`, parseItem),
-  /** 항목 정보(제목·설명·공개 범위) 고치기. 읽은 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104). */
+  /**
+   * 항목 정보(제목·설명·공개 범위) 고치기. 읽은 판(`baseVersion`)이 지났으면 아무것도 바꾸지 않고 서버 최신본을 돌려준다(D-104).
+   * `expectedUser`는 항목을 읽은 화면의 사용자다(D-96). 세션의 사용자와 다르면 409 `account_changed`로 계정 전환을 시작한다.
+   */
   updateItem: async (
     id: string,
     baseVersion: number,
     /** 공개 범위는 바꿀 때만 보낸다(없으면 서버의 지금 값 그대로). */
     input: { title: string; description: string; visibility?: 'workspace' | 'private' },
+    expectedUser: string,
   ): Promise<{ kind: 'updated'; item: ItemView } | { kind: 'conflict'; current: ItemView }> => {
-    const { status, json } = await request('PUT', `/api/items/${encodeURIComponent(id)}`, {
-      base_version: baseVersion,
-      ...input,
-    });
+    const { status, json } = await request(
+      'PUT',
+      `/api/items/${encodeURIComponent(id)}`,
+      { base_version: baseVersion, ...input },
+      startedBy(expectedUser),
+    );
     const current = versionConflict(status, json);
     if (current !== undefined) return { kind: 'conflict', current: parseItem(current) };
     if (status !== 200) fail(status, json);

@@ -272,6 +272,25 @@
     dirty: () => replanStart !== today || replanPerDay !== '1',
     busy: () => replanning,
   });
+  // 쓸 수 없게 되면 숨은 새 단위 입력을, 보관되면 숨은 재배치 입력을 서버 값으로 돌리고 경고에서 뺀다(#289,
+  // D-27). 보낸 요청은 응답까지 잠가 두고, 끝난 뒤 돌린다. 읽기 전용에도 보이는 재배치는 그대로 보호한다.
+  $effect(() => {
+    if (plan === undefined || plan.access === 'write' || adding) return;
+    untrack(() => {
+      draft = { title: '', chapter: '', unit: 'pages', amount: '', planned_on: '' };
+      requestId = newRequestId();
+      requestPayload = '';
+      newDraft.leave.keep();
+    });
+  });
+  $effect(() => {
+    if (plan?.access !== 'archived' || replanning) return;
+    untrack(() => {
+      replanStart = today;
+      replanPerDay = '1';
+      replanDraft.leave.keep();
+    });
+  });
   const drafts = [newDraft, unitDraft, mineDraft, replanDraft];
 
   async function reschedule(overdue: readonly StudyUnitView[]): Promise<void> {
@@ -296,7 +315,7 @@
       );
       if (done) replanDraft.complete(attempt);
     } finally {
-      if (replanDraft.isOwner(attempt)) replanning = false;
+      if (replanDraft.lockedBy(attempt)) replanning = false;
     }
   }
   onMount(() => {
@@ -483,7 +502,7 @@
         return;
       error = errorText(e, m.study_action_failed());
     } finally {
-      if (unitDraft.isOwner(attempt)) savingUnit = false;
+      if (unitDraft.lockedBy(attempt)) savingUnit = false;
     }
   }
 
@@ -545,7 +564,7 @@
     } catch (e: unknown) {
       if (newDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
     } finally {
-      if (newDraft.isOwner(attempt)) adding = false;
+      if (newDraft.lockedBy(attempt)) adding = false;
     }
   }
 
@@ -583,7 +602,7 @@
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.study_action_failed());
     } finally {
-      if (mineDraft.isOwner(attempt)) savingMine = false;
+      if (mineDraft.lockedBy(attempt)) savingMine = false;
     }
   }
 </script>

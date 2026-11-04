@@ -264,7 +264,7 @@
       if (attempt === undefined || manualDraft.isOwner(attempt))
         manualError = errorText(e, m.time_manual_failed());
     } finally {
-      if (attempt !== undefined && manualDraft.isOwner(attempt)) manualBusy = false;
+      if (attempt !== undefined && manualDraft.lockedBy(attempt)) manualBusy = false;
     }
   }
 

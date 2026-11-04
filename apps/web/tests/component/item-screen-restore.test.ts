@@ -227,11 +227,17 @@ it('restores item information and its edit-start version before the first explic
   await waitFor(() => {
     expect(update).toHaveBeenCalledOnce();
   });
-  expect(update).toHaveBeenCalledWith('item-a', 3, {
-    title: '복원할 제목',
-    description: '복원할 설명\n둘째 줄',
-    visibility: 'workspace',
-  });
-  await screen.findByText(m.modules_item_conflict());
+  // 되살린 초안도 항목을 읽은 계정을 기대 사용자로 보낸다(D-96, #307).
+  expect(update).toHaveBeenCalledWith(
+    'item-a',
+    3,
+    {
+      title: '복원할 제목',
+      description: '복원할 설명\n둘째 줄',
+      visibility: 'workspace',
+    },
+    'restore-account-a',
+  );
+  await screen.findByRole('region', { name: m.common_conflict_heading() });
   expect(screen.getByLabelText(m.modules_title())).toHaveValue('복원할 제목');
 });

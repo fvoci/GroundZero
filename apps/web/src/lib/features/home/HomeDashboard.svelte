@@ -266,7 +266,7 @@
     } catch (e: unknown) {
       if (quickDraft.isCurrent(attempt)) quickError = errorText(e, m.home_create_failed());
     } finally {
-      if (quickDraft.isOwner(attempt)) adding = false;
+      if (quickDraft.lockedBy(attempt)) adding = false;
     }
   }
 

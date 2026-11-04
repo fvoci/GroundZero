@@ -32,20 +32,65 @@ measure_lock="$HOME/.cache/fvoci-measure.lock"
 # Keep the private token on the marker's filesystem for atomic hard-link publication.
 measure_token="$$-$(date -u +%Y%m%dT%H%M%S)-$RANDOM-$RANDOM"
 measure_token_file="$measure_lock.token-$measure_token"
+measure_owner_gone() {
+  local pids
+  # Any doubt keeps the owner alive: only a successful listing without the PID is gone.
+  pids=$(ps -eo pid=) || return 1
+  awk -v pid="$1" 'BEGIN {gone=1} $1 == pid {gone=0} END {exit gone ? 0 : 1}' <<< "$pids"
+}
+# #297: SIGKILL or a host stop skips EXIT cleanup. Recover only a token in this script's
+# format whose PID is gone, re-read under the guard; any other marker is waited for.
+recover_stale_measure_lock() {
+  local token pid
+  token=$(cat "$measure_lock" 2> /dev/null) || return 1
+  [[ "$token" =~ ^([1-9][0-9]*)-[0-9]{8}T[0-9]{6}-[0-9]+-[0-9]+$ ]] || return 1
+  pid=${BASH_REMATCH[1]}
+  measure_owner_gone "$pid" || return 1
+  (
+    flock -x 9 || exit
+    if [[ -f "$measure_lock" && ! -L "$measure_lock" ]] && [[ "$(cat "$measure_lock")" == "$token" ]]; then
+      rm -f -- "$measure_lock" "$measure_lock.token-$token"
+    else
+      exit 1
+    fi
+  ) 9>> "$measure_lock.guard"
+}
 wait_for_measurement() {
   while [[ -e "$measure_lock" || -L "$measure_lock" ]]; do
     if [[ ! -f "$measure_lock" || -L "$measure_lock" ]]; then
       printf 'invalid measurement lock path\n' >&2
       return 1
     fi
+    if recover_stale_measure_lock; then continue; fi
     sleep 15
   done
 }
+# #297: a preparation build checks for the marker and runs under a shared lock that
+# publication takes exclusively, so no build starts or runs inside a window.
+prepare_build() {
+  local log=$1 prepare_fd status=0
+  shift
+  while true; do
+    wait_for_measurement || return
+    exec {prepare_fd}>> "$measure_lock.prepare" || return
+    if ! flock -s "$prepare_fd"; then
+      exec {prepare_fd}>&-
+      return 1
+    fi
+    if [[ ! -e "$measure_lock" && ! -L "$measure_lock" ]]; then break; fi
+    exec {prepare_fd}>&-
+  done
+  # The build must not inherit the lock; a lingering child would block publication.
+  "$@" {prepare_fd}>&- > "$log" 2>&1 || status=$?
+  exec {prepare_fd}>&-
+  return "$status"
+}
 publish_measure_lock() {
   (
+    flock -x 8 || exit
     flock -x 9 || exit
     ln -T -- "$measure_token_file" "$measure_lock"
-  ) 9>> "$measure_lock.guard"
+  ) 8>> "$measure_lock.prepare" 9>> "$measure_lock.guard"
 }
 remove_measure_lock() {
   (
@@ -109,14 +154,12 @@ printf '%s\n' "$out"
 git rev-parse HEAD > "$out/sha.txt"
 sha256sum crates/db/migrations/*.sql > "$out/sql-sha256.txt"
 # Complete every build before opening the measurement window (#291).
-wait_for_measurement
-cargo build --release --locked -p fvoci-server > "$out/build-server.log" 2>&1
-wait_for_measurement
-cargo test --release --locked -p fvoci-server --test it --test screen_measure --no-run > "$out/build-tests.log" 2>&1
+prepare_build "$out/build-server.log" cargo build --release --locked -p fvoci-server
+prepare_build "$out/build-tests.log" cargo test --release --locked -p fvoci-server --test it --test screen_measure --no-run
 if [[ "$mode" == screens ]]; then
   wait_for_measurement
   web_inputs_before=$(check_web_inputs)
-  pnpm --filter @fvoci/web run build > "$out/web-build.log" 2>&1
+  prepare_build "$out/web-build.log" pnpm --filter @fvoci/web run build
   check_web_inputs "$web_inputs_before"
   test -s "$root/apps/web/dist/index.html"
   test "$(git rev-parse HEAD)" = "$(cat "$out/sha.txt")"

@@ -1,7 +1,7 @@
 <script lang="ts">
   // 모듈 하나: 설명, 항목 목록과 항목 만들기, 관리자의 이름·키·아이콘·설명 변경과 보관·휴지통 (D-15, D-16, D-18, D-78).
   import type { Module, Workspace } from '@fvoci/api-client';
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { createFormDraft } from '$lib/features/common/form-draft.svelte';
   import type { CreateFormContext } from '$lib/features/common/form-draft';
   import FormDraftOffer from '$lib/features/common/FormDraftOffer.svelte';
@@ -246,7 +246,7 @@
           ? m.modules_key_taken()
           : errorText(e, m.modules_change_failed());
     } finally {
-      if (settingsDraft.isOwner(attempt)) savingSettings = false;
+      if (settingsDraft.lockedBy(attempt)) savingSettings = false;
       if (pendingSettingsSave === save) pendingSettingsSave = undefined;
     }
   }
@@ -288,6 +288,14 @@
     busy: () => templateBusy,
   });
   onMount(templateDraft.attach);
+  // 만들 수 없게 되면(공간 read·모듈 보관) 숨은 템플릿 입력을 되살리기 제안으로 옮기고 화면 입력은 비워 경고에서
+  // 뺀다(#289, D-27). 응답을 잃은 복제의 요청 id가 함께 남아, 권한을 되찾아 다시 내도 중복 복제가 생기지 않는다.
+  // 보낸 복제는 응답까지 잠가 두고, 끝난 뒤 옮긴다. 새 항목 제목은 자식 폼이 언마운트되며 가드를 푼다. 계정
+  // 전환·복구 중에는 입력을 그대로 두고(D-96), 같은 사용자로 끝나면 이 효과가 다시 돌아 옮긴다(CR-311-1).
+  $effect(() => {
+    if (canCreate || templateBusy || accountSwitching()) return;
+    untrack(templateDraft.shelve);
+  });
 
   async function fromTemplate(moduleId: string): Promise<void> {
     if (templateBusy || !templateDraft.active || templateDraft.blocked) return;
@@ -318,7 +326,7 @@
       if (attempt === undefined || !templateDraft.isCurrent(attempt)) return;
       templateError = errorText(e, m.modules_create_failed());
     } finally {
-      if (attempt !== undefined && templateDraft.isOwner(attempt)) templateBusy = false;
+      if (attempt !== undefined && templateDraft.lockedBy(attempt)) templateBusy = false;
     }
   }
 

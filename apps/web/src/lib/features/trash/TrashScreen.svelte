@@ -182,7 +182,7 @@
       if (version) versionDaysError = text;
       else daysError = text;
     } finally {
-      if (draft.isOwner(attempt)) {
+      if (draft.lockedBy(attempt)) {
         if (version) versionDaysSaving = false;
         else daysSaving = false;
       }

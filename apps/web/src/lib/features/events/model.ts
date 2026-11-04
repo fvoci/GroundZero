@@ -16,6 +16,8 @@ export type EventView = Omit<
   ends_at: string | null;
   recurrence: RecurrenceRule | null;
 };
+export type EventRead = EventView &
+  Pick<Schemas['EventDetail'], 'archived'> & { viewer_id: string };
 
 export type EventInput = Required<Schemas['EventInput']>;
 

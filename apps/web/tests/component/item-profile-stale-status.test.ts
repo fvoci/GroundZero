@@ -102,7 +102,7 @@ describe('item profile status line', () => {
 
     await fireEvent.click(await screen.findByRole('button', { name: '고치기' }));
     await fireEvent.click(screen.getByRole('button', { name: '저장' }));
-    await screen.findByText(/그사이 다른 사람이 항목 정보를 바꿔/);
+    await screen.findByRole('region', { name: m.common_conflict_heading() });
     await waitFor(() => {
       expect(screen.queryByText('항목 정보를 저장했습니다.')).not.toBeInTheDocument();
     });
@@ -306,6 +306,8 @@ it('restores all profile text and the original base only for the original accoun
       item.id,
       1,
       expect.objectContaining({ goal: '긴 목표\n다음 줄' }),
+      // 되살린 편집은 그 초안의 계정을 기대 사용자로 보낸다(D-96, #307).
+      'user-a',
     );
   });
 });

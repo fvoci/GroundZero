@@ -347,6 +347,18 @@
     dirty: () => csvText !== '',
     busy: () => adding,
   });
+  // 강좌를 쓸 수 없게 되면(read·보관) 숨은 새 회차 입력은 빈 칸으로 돌리고, CSV는 긴 입력이라 남긴 초안을 지우지
+  // 않고 되살리기 제안으로 옮긴다(#289, D-27). 보낸 추가는 응답까지 잠가 두고, 끝난 뒤 정리한다.
+  $effect(() => {
+    if (course === undefined || course.access === 'write' || adding) return;
+    untrack(() => {
+      newEpisode = { title: '', chapter: '', duration: '', planned_on: '' };
+      newId = newRequestId();
+      newPayload = '';
+      newDraft.leave.keep();
+      csvDraft.shelve();
+    });
+  });
   const drafts = [detailsDraft, episodeDraft, mineDraft, newDraft, csvDraft];
   onMount(() => {
     const detach = drafts.map((draft) => draft.attach());
@@ -575,7 +587,7 @@
         return;
       error = errorText(e, m.courses_action_failed());
     } finally {
-      if (episodeDraft.isOwner(attempt)) savingEpisode = false;
+      if (episodeDraft.lockedBy(attempt)) savingEpisode = false;
     }
   }
 
@@ -687,7 +699,7 @@
     } catch (e: unknown) {
       if (mineDraft.isOwner(attempt)) error = errorText(e, m.courses_action_failed());
     } finally {
-      if (mineDraft.isOwner(attempt)) savingMine = false;
+      if (mineDraft.lockedBy(attempt)) savingMine = false;
     }
   }
 </script>
@@ -1228,7 +1240,7 @@
                 if (ok) newDraft.complete(attempt);
               })
               .finally(() => {
-                if (newDraft.isOwner(attempt)) adding = false;
+                if (newDraft.lockedBy(attempt)) adding = false;
               });
           }}
         >
@@ -1305,7 +1317,7 @@
                     if (ok) csvDraft.complete(attempt);
                   })
                   .finally(() => {
-                    if (csvDraft.isOwner(attempt)) adding = false;
+                    if (csvDraft.lockedBy(attempt)) adding = false;
                   });
               }}>{m.courses_csv_add()}</Button
             >

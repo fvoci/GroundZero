@@ -203,7 +203,7 @@
       if (e instanceof ApiError && e.code === 'account_changed') accountBlocked = true;
       error = errorText(e, m.events_task_create_failed());
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 </script>

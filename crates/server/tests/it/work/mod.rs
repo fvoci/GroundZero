@@ -13,5 +13,6 @@ mod events;
 mod saved_views;
 
 mod event_conflict_contracts;
+mod event_detail_reads;
 mod event_recurrence;
 mod expected_event_user;

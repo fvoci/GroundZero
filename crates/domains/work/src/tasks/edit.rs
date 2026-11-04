@@ -1,5 +1,5 @@
-//! 업무 고치기의 저장 한 번(D-94, D-91·D-125): 칸 전체를 기준 판 조건으로 저장하고, 승인한 후속 재배치를 같은 트랜잭션에서
-//! 옮긴다. 옛 `PUT /api/tasks/{id}`와 새 `PATCH /api/tasks/{id}`가 함께 쓴다.
+//! 업무 고치기의 저장 한 번(D-94, D-91·D-125): 업무 칸과 보낸 담당 목록을 기준 판 조건으로 저장하고, 승인한 후속 재배치를
+//! 같은 트랜잭션에서 옮긴다. `PATCH /api/tasks/{id}`가 쓴다.
 
 use std::collections::HashMap;
 
@@ -13,7 +13,7 @@ use fvoci_core::error::AppError;
 use fvoci_core::ids::UserId;
 use fvoci_db::needed_ids;
 
-/// 확인을 마친 업무 칸 전체(저장할 모습).
+/// 확인을 마친 업무 칸(저장할 모습). 담당은 보냈을 때만 바꾼다.
 #[derive(Debug)]
 pub(super) struct Edit {
     pub(super) title: String,
@@ -25,7 +25,8 @@ pub(super) struct Edit {
     pub(super) due: Option<Date>,
     pub(super) estimate_minutes: Option<i32>,
     pub(super) tags: Vec<String>,
-    pub(super) assignee_ids: Vec<UserId>,
+    /// `None`은 담당 유지, `Some([])`는 전체 해제다.
+    pub(super) assignee_ids: Option<Vec<UserId>>,
     pub(super) milestone: bool,
 }
 

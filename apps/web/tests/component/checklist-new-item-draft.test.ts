@@ -147,7 +147,9 @@ describe('checklist drafts', () => {
     expect(h.onadd).toHaveBeenCalledTimes(1);
   });
 
-  it('retains hidden screen input through permission withdrawal without a durable offer', async () => {
+  // #289: 짧은 칸은 화면에 있는 동안만 둔다(D-27 개정 2026-10-28). 권한이 빠져 숨으면 경고에서 빠지고 서버 값(빈
+  // 칸)으로 돌아온다. 영구 초안도 만들지 않는다.
+  it('drops hidden screen input after permission withdrawal without a durable offer', async () => {
     const h = handlers();
     const onunsaved = vi.fn();
     const view = render(ChecklistForm, { ...base, ...h, onunsaved });
@@ -156,9 +158,11 @@ describe('checklist drafts', () => {
     });
     await view.rerender({ ...base, ...h, onunsaved, canEdit: false });
     expect(screen.queryByLabelText('새 항목')).toBeNull();
-    expect(onunsaved).toHaveBeenLastCalledWith(true);
+    await waitFor(() => {
+      expect(onunsaved).toHaveBeenLastCalledWith(false);
+    });
     await view.rerender({ ...base, ...h, onunsaved });
-    expect(screen.getByLabelText('새 항목')).toHaveValue('권한 철회 전 입력');
+    expect(screen.getByLabelText('새 항목')).toHaveValue('');
     view.unmount();
     render(ChecklistForm, { ...base, ...h });
     expect(screen.queryByTestId('checklist-new-item-draft-offer')).toBeNull();

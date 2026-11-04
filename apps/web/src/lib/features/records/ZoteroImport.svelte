@@ -131,7 +131,7 @@
       if (!draft.isCurrent(attempt) || context.keyVersion !== keyVersion) return;
       error = errorText(e, m.records_zotero_unreachable());
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 
@@ -159,7 +159,7 @@
       if (!draft.isOwner(attempt)) return;
       error = errorText(e, m.records_zotero_failed());
     } finally {
-      if (draft.isOwner(attempt)) busy = false;
+      if (draft.lockedBy(attempt)) busy = false;
     }
   }
 </script>

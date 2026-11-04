@@ -1,3 +1,4 @@
+import { eventRead } from './fixtures/event-read';
 import { type EventInput, type EventView } from '$lib/features/events/model';
 import { eventsApi } from '$lib/features/events/api';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
@@ -83,7 +84,9 @@ async function findConfirm(): Promise<HTMLElement> {
 const flush = (): Promise<void> => new Promise((r) => setTimeout(r, 0));
 
 function stub(...results: UpdateResult[]) {
-  vi.spyOn(eventsApi, 'event').mockImplementation((id: string) => Promise.resolve(ev(id)));
+  vi.spyOn(eventsApi, 'event').mockImplementation((id: string) =>
+    Promise.resolve(((id: string) => Promise.resolve(ev(id)))(id)).then(eventRead),
+  );
   const update = vi.spyOn(eventsApi, 'updateEvent');
   for (const r of results) update.mockResolvedValueOnce(r);
   update.mockImplementation((id: string, base: number, input: EventInput) =>
@@ -319,7 +322,7 @@ describe('closing the event dialog with unsaved input', () => {
   });
 
   it('neither asks nor closes while saving', async () => {
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A'));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(ev('A')));
     const late = deferred<UpdateResult>();
     vi.spyOn(eventsApi, 'updateEvent').mockReturnValue(late.promise);
     const onclose = vi.fn();
@@ -337,7 +340,7 @@ describe('closing the event dialog with unsaved input', () => {
   // CodeRabbit(9e226e0): 저장하는 동안 칸을 고칠 수 있었는데, 저장되면 입력 양식을 저장된 일정으로 다시 그려 그사이 친
   // 글이 말없이 사라졌다. 보내는 동안은 칸을 잠근다.
   it('locks the fields while saving so a late result cannot drop what I type meanwhile', async () => {
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A'));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(ev('A')));
     const late = deferred<UpdateResult>();
     vi.spyOn(eventsApi, 'updateEvent').mockReturnValue(late.promise);
     await open();
@@ -355,7 +358,7 @@ describe('closing the event dialog with unsaved input', () => {
   // CodeRabbit(7179119): 일정 저장과 반복 규칙 저장이 겹치면 늦게 온 쪽이 더 옛 일정을 다시 놓았다. 한 요청이 가는 동안은
   // 일정 입력과 반복 규칙 입력을 함께 잠가 둘이 겹치지 않게 한다.
   it('locks the rule editor while the event saves and the event fields while the rule saves', async () => {
-    vi.spyOn(eventsApi, 'event').mockResolvedValue(ev('A'));
+    vi.spyOn(eventsApi, 'event').mockResolvedValue(eventRead(ev('A')));
     const lateEvent = deferred<UpdateResult>();
     vi.spyOn(eventsApi, 'updateEvent').mockReturnValue(lateEvent.promise);
     const lateRule = deferred<EventView>();
@@ -397,19 +400,20 @@ describe('closing the event dialog with unsaved input', () => {
     await open();
     await typeTitle('새 회의');
     await fireEvent.submit(eventForm());
-    const saveMine = await screen.findByRole('button', { name: m.events_save_mine() });
+    const saveMine = await screen.findByRole('button', { name: m.common_conflict_save() });
+    await fireEvent.click(screen.getByRole('button', { name: m.common_conflict_cancel() }));
     const ruleForm = screen
       .getByRole('button', { name: m.events_recurrence_save() })
       .closest('form');
     if (ruleForm === null) throw new Error('no rule form');
     await fireEvent.submit(ruleForm);
-    expect(saveMine.matches(':disabled')).toBe(true);
+    expect(field(m.events_title()).matches(':disabled')).toBe(true);
     await fireEvent.click(saveMine);
     await flush();
     expect(update).toHaveBeenCalledTimes(1);
     lateRule.resolve(ev('A', {}, 6));
     await waitFor(() => {
-      expect(saveMine.matches(':disabled')).toBe(false);
+      expect(field(m.events_title()).matches(':disabled')).toBe(false);
     });
   });
 
@@ -419,7 +423,7 @@ describe('closing the event dialog with unsaved input', () => {
     await open(onclose);
     await typeTitle('새 회의');
     await fireEvent.submit(eventForm());
-    await screen.findByRole('button', { name: m.events_save_mine() });
+    await screen.findByRole('button', { name: m.common_conflict_save() });
     await fireEvent.click(closeButton());
     const box = await findConfirm();
     await fireEvent.click(within(box).getByRole('button', { name: m.common_discard_keep() }));
@@ -427,7 +431,7 @@ describe('closing the event dialog with unsaved input', () => {
       expect(confirmBox()).toBeNull();
     });
     expect(onclose).not.toHaveBeenCalled();
-    expect(screen.getByRole('button', { name: m.events_save_mine() })).toBeInstanceOf(
+    expect(screen.getByRole('button', { name: m.common_conflict_save() })).toBeInstanceOf(
       HTMLButtonElement,
     );
     expect(field(m.events_title()).value).toBe('새 회의');
@@ -439,8 +443,7 @@ describe('closing the event dialog with unsaved input', () => {
     await open(onclose);
     await typeTitle('내 제목');
     await fireEvent.submit(eventForm());
-    await fireEvent.click(await screen.findByRole('button', { name: m.events_save_mine() }));
-    await screen.findByRole('alertdialog', { name: m.events_clash_question() });
+    await screen.findByRole('region', { name: m.common_conflict_heading() });
     await fireEvent.click(closeButton());
     const box = await findConfirm();
     await escape(box);
@@ -448,7 +451,7 @@ describe('closing the event dialog with unsaved input', () => {
       expect(confirmBox()).toBeNull();
     });
     expect(onclose).not.toHaveBeenCalled();
-    expect(screen.getByRole('alertdialog', { name: m.events_clash_question() })).toBeInstanceOf(
+    expect(screen.getByRole('region', { name: m.common_conflict_heading() })).toBeInstanceOf(
       HTMLElement,
     );
     expect(field(m.events_title()).value).toBe('내 제목');

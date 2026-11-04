@@ -2,6 +2,7 @@
 use crate::common;
 use sqlx::Connection;
 
+mod assignee_updates;
 mod fixture;
 mod matrix;
 mod mutations;

@@ -1,18 +1,13 @@
 import { type EventInput } from '$lib/features/events/model';
-// 일정 충돌 뒤 "내 입력으로 다시 저장"의 합치기(D-94). 입력을 연 때의 일정(`base`)과 비교해 내가 고친 칸만 내 값으로,
-// 나머지는 서버 최신 값으로 보낸다. 같은 칸을 서버에서도 다른 값으로 바꿨으면 겹친 칸으로 돌려주고, 화면이 양쪽 값을
-// 보여 덮어쓸지 묻는다. 날짜·시각·시간대·종일 여부는 한 묶음(`when`)이다(시작만 내 것, 끝은 서버 것처럼 섞이지 않게).
+import type { RecurrenceRule } from '$lib/features/tasks/model';
+import type { ConflictField } from '$lib/features/common/field-conflict';
+import { m } from '$lib/paraglide/messages.js';
+import { KIND_LABEL, describeRule } from './labels';
+// D-94의 공통 비교에 전달하는 일정 단위. 날짜·시각·시간대·종일 여부는 한 묶음이다.
 
 /** 합치는 칸. `when`은 종일 여부·날짜·시각·시간대 묶음. */
 export const EVENT_UNITS = ['kind', 'title', 'description', 'when'] as const;
 export type EventUnit = (typeof EVENT_UNITS)[number];
-
-export interface MergedInput {
-  /** 보낼 입력: 내가 고친 칸은 내 값, 나머지는 서버 값. 겹친 칸도 내 값이다(덮어쓰기를 확인받은 뒤에만 보낸다). */
-  input: EventInput;
-  /** 양쪽이 서로 다른 값으로 고친 칸. */
-  clashes: EventUnit[];
-}
 
 const WHITE_SPACE = /\p{White_Space}/u;
 
@@ -33,7 +28,11 @@ function sameInstant(a: string | null, b: string | null): boolean {
   if (a === null || b === null) return a === b;
   const x = Date.parse(a);
   const y = Date.parse(b);
-  return Number.isNaN(x) || Number.isNaN(y) ? a === b : x === y;
+  if (Number.isNaN(x) || Number.isNaN(y)) return a === b;
+  // Date.parse truncates below milliseconds; the server preserves RFC3339 nanoseconds.
+  const fraction = (value: string): string =>
+    (/\.(\d+)(?:Z|[+-]\d{2}:\d{2})$/i.exec(value)?.[1] ?? '').replace(/0+$/, '');
+  return x === y && fraction(a) === fraction(b);
 }
 
 /**
@@ -83,7 +82,7 @@ function take(unit: EventUnit, into: EventInput, from: EventInput): EventInput {
 }
 
 /** 입력 칸만 옮긴다(서버 일정의 id·버전·권한 같은 칸이 보내는 본문에 섞이지 않게). */
-function inputOf(e: EventInput): EventInput {
+export function inputOf(e: EventInput): EventInput {
   return {
     kind: e.kind,
     title: e.title,
@@ -97,21 +96,52 @@ function inputOf(e: EventInput): EventInput {
   };
 }
 
-/**
- * 서버 최신 일정(`server`)에 내 입력(`mine`)을 합친다. `base`는 입력을 연 때의 일정이다. 고치지 않은 칸은 서버 값,
- * 고친 칸은 서버가 그대로 두었거나 같은 값으로 바꿨으면 내 값, 서로 다른 값으로 바꿨으면 겹친 칸이다.
- */
-export function mergeEventInput(
-  base: EventInput,
-  mine: EventInput,
-  server: EventInput,
-): MergedInput {
-  let input = inputOf(server);
-  const clashes: EventUnit[] = [];
-  for (const unit of EVENT_UNITS) {
-    if (sameUnit(unit, mine, base)) continue;
-    input = take(unit, input, mine);
-    if (!sameUnit(unit, server, base) && !sameUnit(unit, server, mine)) clashes.push(unit);
-  }
-  return { input, clashes };
+export function eventConflictFields(): ConflictField<EventInput>[] {
+  return EVENT_UNITS.map((key) => ({
+    key,
+    label:
+      key === 'when'
+        ? m.events_clash_when()
+        : key === 'kind'
+          ? m.events_kind()
+          : key === 'title'
+            ? m.events_title()
+            : m.events_description(),
+    same: (a, b) => sameUnit(key, a, b),
+    text: (value) => {
+      if (key === 'kind') return KIND_LABEL[value.kind];
+      if (key !== 'when') return value[key];
+      return `${value.all_day ? m.events_all_day() : ''}\n${value.start_date ?? value.starts_at ?? ''} → ${value.end_date ?? value.ends_at ?? ''}\n${value.timezone}`.trim();
+    },
+    copy: (target, source) => {
+      Object.assign(target, take(key, target, source));
+    },
+  }));
+}
+
+export interface RuleValue {
+  rule: RecurrenceRule | null;
+}
+export function sameRule(a: RecurrenceRule | null, b: RecurrenceRule | null): boolean {
+  if (a === null || b === null) return a === b;
+  return (
+    a.freq === b.freq &&
+    a.interval === b.interval &&
+    a.until === b.until &&
+    a.count === b.count &&
+    [...new Set(a.weekdays)].sort().join(',') === [...new Set(b.weekdays)].sort().join(',')
+  );
+}
+export function ruleConflictFields(): ConflictField<RuleValue>[] {
+  return [
+    {
+      key: 'rule',
+      label: m.events_recurrence(),
+      same: (a, b) => sameRule(a.rule, b.rule),
+      text: (value) => (value.rule === null ? m.events_freq_none() : describeRule(value.rule)),
+      copy: (target, source) => {
+        target.rule = source.rule;
+      },
+    },
+  ];
 }
