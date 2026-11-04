@@ -69,10 +69,12 @@ async fn home_shared_document_labels_hide_inaccessible_item_references() {
         "{:?}",
         owner_document.json
     );
-    let reference = owner_document.json["reference"].as_str().unwrap();
-    assert!(reference.starts_with("SQL-"), "{:?}", owner_document.json);
+    // D-48 shares the module sequence: World creates item 1, then this document 2.
+    // Keep the label oracle independent of both APIs' reference formatter.
+    let reference = "SQL-2";
+    assert_eq!(owner_document.json["reference"], reference);
     assert_eq!(owner_document.json["title"], "SQL document");
-    let full_label = format!("{reference} SQL document");
+    let full_label = "SQL-2 SQL document";
 
     for user in [&w.owner, &reader, &outside] {
         if user.id != w.owner.id {
@@ -95,7 +97,7 @@ async fn home_shared_document_labels_hide_inaccessible_item_references() {
         }
     }
     // 같은 문서도 상위 항목을 읽을 수 있는 소유자에게만 참조를 붙인다.
-    check_document_label(&w, &w.owner, doc, &full_label).await;
+    check_document_label(&w, &w.owner, doc, full_label).await;
     check_document_label(&w, &reader, doc, "SQL document").await;
     check_document_label(&w, &outside, doc, "SQL document").await;
 
@@ -107,7 +109,7 @@ async fn home_shared_document_labels_hide_inaccessible_item_references() {
     let visible = send(&app, Method::GET, &path, Some(&reader), None).await;
     assert_eq!(visible.status, StatusCode::OK, "{:?}", visible.json);
     assert_eq!(visible.json["reference"], reference);
-    check_document_label(&w, &reader, doc, &full_label).await;
+    check_document_label(&w, &reader, doc, full_label).await;
     check_document_label(&w, &outside, doc, "SQL document").await;
 }
 
