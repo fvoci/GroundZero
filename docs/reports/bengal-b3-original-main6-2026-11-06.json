@@ -1,0 +1,2428 @@
+{
+  "stage": "original-control-main6-20261105-v1",
+  "measuredSourceHead": "c108395bf4067a652afb4c012e25de82294ac1d7",
+  "sqlSourceHead": "743a8ab9967caf7aeb73776ea6350939e89f8db9",
+  "variant": {
+    "D1": true,
+    "H2": false,
+    "H1": false,
+    "C1": false,
+    "C2": false
+  },
+  "dataset": "T6",
+  "arguments": {
+    "today": "2026-11-06",
+    "timezone": "Asia/Seoul",
+    "calendarFrom": "2026-11-01",
+    "calendarTo": "2026-12-12",
+    "calendarModule": "",
+    "calendarItem": ""
+  },
+  "command": "tools/measure-perf.sh screens",
+  "toolSha256": "d7b4170e68861011f17af8b758f19d38ca3309886a31b247d368308e94c2b4d4",
+  "protocol": "b3-v6-tmpfs-absolute",
+  "sourceSqlChecksums": {
+    "crates/db/migrations/202610280001_foundation.sql": "f443304b5db742d0a85eb56d6696153c5d68e2eec266253c0bf988dc56361400",
+    "crates/db/migrations/202610280002_organizations.sql": "cb7bb336d6f9d8d4f5b5484a4f269295962b89abc3bbdbfbc692b44415409b1f",
+    "crates/db/migrations/202610280003_documents.sql": "1935bfb5ce58ee945dd99f0ab1cab5eebc2a2bf936ff54f13a47e0f330890f97",
+    "crates/db/migrations/202610280004_files.sql": "fcc0efa7f314957f29e9be33ec716b0b35353c26161101ed7ab0a288c97351d4",
+    "crates/db/migrations/202610280005_work.sql": "c6ca990c8b201636a29efed739d5288232110a0b2f3f445143d8e0cb40da8764",
+    "crates/db/migrations/202610280006_records.sql": "aa1a039f6545d86afbeb064a6311ada488a8fa6bbc00d026b23635e91235f2a2",
+    "crates/db/migrations/202610280007_time.sql": "dd884235d82f423ca4ecf37cf3da718bea38074b68a0c8d701f4f49650c33ef9",
+    "crates/db/migrations/202610280008_activity.sql": "50c1477da90a4563b934724ab57b7e9f101d74bf8c97942ede2513665c6ee7fb",
+    "crates/db/migrations/202610280009_system.sql": "fd20f9b014105795e430df52c35044ba5778ce181fd3db83e89f559f97e1eb57",
+    "crates/db/migrations/202610280010_access_grants.sql": "ba9996dad5fd485144a25860d55893e6f8a942760ea17f8dc5e138a934f9afc2"
+  },
+  "attempts": [
+    {
+      "attempt": 1,
+      "status": "CONTAMINATED",
+      "startUtc": "2026-11-05T20:42:22.103Z",
+      "endUtc": "2026-11-05T20:43:17.782Z",
+      "reason": "External work CPU exceeded 10% during the complete measurement window; reject the whole batch.",
+      "outsideWorkCpuPeakInMeasurement": 11.983,
+      "outsideWorkCpuPeakInPreparation": 43.313,
+      "buildDiscardedRounds": 0,
+      "screens": [
+        {
+          "screen": "activity",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 77.576,
+          "firstContentMs": 414.5,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "activity",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 81.04,
+          "firstContentMs": 428.4,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "activity",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 73.237,
+          "firstContentMs": 413.8,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "board",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 33.396,
+          "firstContentMs": 454.5,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "board",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 35.745,
+          "firstContentMs": 425.2,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "board",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 31.843,
+          "firstContentMs": 419.2,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "calendar",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 82.33,
+          "firstContentMs": 423.5,
+          "apiRequests": 10,
+          "httpRequests": 16,
+          "depth": 3
+        },
+        {
+          "screen": "calendar",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 84.718,
+          "firstContentMs": 427.7,
+          "apiRequests": 10,
+          "httpRequests": 16,
+          "depth": 3
+        },
+        {
+          "screen": "calendar",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 84.286,
+          "firstContentMs": 429.1,
+          "apiRequests": 10,
+          "httpRequests": 16,
+          "depth": 3
+        },
+        {
+          "screen": "document-open",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 18.347,
+          "firstContentMs": 350.2,
+          "apiRequests": 13,
+          "httpRequests": 19,
+          "depth": 4
+        },
+        {
+          "screen": "document-open",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 16.963,
+          "firstContentMs": 340.6,
+          "apiRequests": 13,
+          "httpRequests": 19,
+          "depth": 4
+        },
+        {
+          "screen": "document-open",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 18.741,
+          "firstContentMs": 352.4,
+          "apiRequests": 13,
+          "httpRequests": 19,
+          "depth": 4
+        },
+        {
+          "screen": "document-tree",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 30.218,
+          "firstContentMs": 370.9,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "document-tree",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 16.912,
+          "firstContentMs": 363.1,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "document-tree",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 17.901,
+          "firstContentMs": 363.8,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "gantt",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 37.41,
+          "firstContentMs": 464.7,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "gantt",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 34.92,
+          "firstContentMs": 465.4,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "gantt",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 36.106,
+          "firstContentMs": 455.9,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "home",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 256.653,
+          "firstContentMs": 613.1,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "home",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 84.135,
+          "firstContentMs": 453.7,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "home",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 76.757,
+          "firstContentMs": 429.6,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "my-tasks",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 19.012,
+          "firstContentMs": 300,
+          "apiRequests": 7,
+          "httpRequests": 13,
+          "depth": 3
+        },
+        {
+          "screen": "my-tasks",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 19.366,
+          "firstContentMs": 301.4,
+          "apiRequests": 7,
+          "httpRequests": 13,
+          "depth": 3
+        },
+        {
+          "screen": "my-tasks",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 16.143,
+          "firstContentMs": 290.5,
+          "apiRequests": 7,
+          "httpRequests": 13,
+          "depth": 3
+        },
+        {
+          "screen": "task-detail",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "p95Ms": 37.227,
+          "firstContentMs": 470.3,
+          "apiRequests": 20,
+          "httpRequests": 26,
+          "depth": 4
+        },
+        {
+          "screen": "task-detail",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "p95Ms": 34.771,
+          "firstContentMs": 447.2,
+          "apiRequests": 20,
+          "httpRequests": 26,
+          "depth": 4
+        },
+        {
+          "screen": "task-detail",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "p95Ms": 39.498,
+          "firstContentMs": 447.9,
+          "apiRequests": 20,
+          "httpRequests": 26,
+          "depth": 4
+        }
+      ],
+      "sql": [
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: organization",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 1.377,
+          "sharedHit": 262,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_choice",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.004,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_validation_unchanged",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 31.793,
+          "sharedHit": 41,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: today",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.125,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: workspace_scope",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.948,
+          "sharedHit": 306,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "up_next_and_counts",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 8.572,
+          "sharedHit": 987,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_tasks",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 4.097,
+          "sharedHit": 270,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_documents",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 7.61,
+          "sharedHit": 804,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "active_items",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 16.175,
+          "sharedHit": 2139,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "my_tasks",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 4.263,
+          "sharedHit": 709,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "pins_and_favorites_unchanged",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.069,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "all_lists_and_json",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 35.286,
+          "sharedHit": 4151,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: whole_function",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 69.819,
+          "sharedHit": 4214,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_count",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.105
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_access_sum",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 94.907
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_item_document_count",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.027
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_recent_activity",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 107.398
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_home",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 75.732
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_my_tasks",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 3.75
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_calendar",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 75.198
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_recent_activity",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 3.253
+        },
+        {
+          "kind": "native_db",
+          "metric": "rls_item_document_count",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 10.03
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_rls_only",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 9.572
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_reference",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 52.897
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_parent_visibility",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 61.902
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 62.86
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list_C1",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 18.512
+        },
+        {
+          "kind": "native_db",
+          "metric": "current_document_list_C2",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 9.835
+        },
+        {
+          "kind": "native_db",
+          "metric": "timezone_validation",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 31.511
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_item_visibility",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.237
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_list",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 16.571
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_detail",
+          "repeat": 1,
+          "status": "CONTAMINATED",
+          "executionMs": 0.896
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: organization",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 1.352,
+          "sharedHit": 262,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_choice",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.004,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_validation_unchanged",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 32.141,
+          "sharedHit": 41,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: today",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.153,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: workspace_scope",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.861,
+          "sharedHit": 306,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "up_next_and_counts",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 8.557,
+          "sharedHit": 987,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_tasks",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 4.166,
+          "sharedHit": 270,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_documents",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 7.59,
+          "sharedHit": 804,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "active_items",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 15.785,
+          "sharedHit": 2139,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "my_tasks",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 4.151,
+          "sharedHit": 709,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "pins_and_favorites_unchanged",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.069,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "all_lists_and_json",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 34.965,
+          "sharedHit": 4151,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: whole_function",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 69.572,
+          "sharedHit": 4214,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_count",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.096
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_access_sum",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 94.891
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_item_document_count",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.029
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_recent_activity",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 105.501
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_home",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 79.8
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_my_tasks",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 3.549
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_calendar",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 75.136
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_recent_activity",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 3.117
+        },
+        {
+          "kind": "native_db",
+          "metric": "rls_item_document_count",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 9.756
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_rls_only",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 9.733
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_reference",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 57.148
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_parent_visibility",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 62.94
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 63.463
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list_C1",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 18.786
+        },
+        {
+          "kind": "native_db",
+          "metric": "current_document_list_C2",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 10.179
+        },
+        {
+          "kind": "native_db",
+          "metric": "timezone_validation",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 31.595
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_item_visibility",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.242
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_list",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 16.901
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_detail",
+          "repeat": 2,
+          "status": "CONTAMINATED",
+          "executionMs": 0.969
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: organization",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 1.731,
+          "sharedHit": 262,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_choice",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.004,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_validation_unchanged",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 32.663,
+          "sharedHit": 41,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: today",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.127,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: workspace_scope",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.87,
+          "sharedHit": 306,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "up_next_and_counts",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 8.651,
+          "sharedHit": 987,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_tasks",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 4.121,
+          "sharedHit": 270,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_documents",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 7.962,
+          "sharedHit": 804,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "active_items",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 15.811,
+          "sharedHit": 2139,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "my_tasks",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 4.675,
+          "sharedHit": 709,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "pins_and_favorites_unchanged",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.07,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "all_lists_and_json",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 35.569,
+          "sharedHit": 4151,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: whole_function",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 70.768,
+          "sharedHit": 4214,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_count",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.117
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_access_sum",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 95.537
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_item_document_count",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.029
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_recent_activity",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 109.444
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_home",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 74.82
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_my_tasks",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 3.924
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_calendar",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 74.644
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_recent_activity",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 3.18
+        },
+        {
+          "kind": "native_db",
+          "metric": "rls_item_document_count",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 10.124
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_rls_only",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 9.547
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_reference",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 52.946
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_parent_visibility",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 61.804
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 61.738
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list_C1",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 18.989
+        },
+        {
+          "kind": "native_db",
+          "metric": "current_document_list_C2",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 9.863
+        },
+        {
+          "kind": "native_db",
+          "metric": "timezone_validation",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 34.414
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_item_visibility",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.371
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_list",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 16.521
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_detail",
+          "repeat": 3,
+          "status": "CONTAMINATED",
+          "executionMs": 0.932
+        }
+      ]
+    },
+    {
+      "attempt": 2,
+      "status": "VALID",
+      "startUtc": "2026-11-05T20:52:04.798Z",
+      "endUtc": "2026-11-05T20:53:00.448Z",
+      "reason": "Frozen v6 qualifier and manual audit passed.",
+      "outsideWorkCpuPeakInMeasurement": 8.789,
+      "outsideWorkCpuPeakInPreparation": 43.565,
+      "buildDiscardedRounds": 0,
+      "screens": [
+        {
+          "screen": "activity",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 84.132,
+          "firstContentMs": 443.3,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "activity",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 79.12,
+          "firstContentMs": 416.6,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "activity",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 79.806,
+          "firstContentMs": 426,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "board",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 36.833,
+          "firstContentMs": 455.7,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "board",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 40.049,
+          "firstContentMs": 480.1,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "board",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 33.618,
+          "firstContentMs": 434.6,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "calendar",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 87.507,
+          "firstContentMs": 428.6,
+          "apiRequests": 10,
+          "httpRequests": 16,
+          "depth": 3
+        },
+        {
+          "screen": "calendar",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 78.502,
+          "firstContentMs": 414,
+          "apiRequests": 10,
+          "httpRequests": 16,
+          "depth": 3
+        },
+        {
+          "screen": "calendar",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 82.701,
+          "firstContentMs": 417.4,
+          "apiRequests": 10,
+          "httpRequests": 16,
+          "depth": 3
+        },
+        {
+          "screen": "document-open",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 17.665,
+          "firstContentMs": 342.1,
+          "apiRequests": 13,
+          "httpRequests": 19,
+          "depth": 4
+        },
+        {
+          "screen": "document-open",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 17.595,
+          "firstContentMs": 342.8,
+          "apiRequests": 13,
+          "httpRequests": 19,
+          "depth": 4
+        },
+        {
+          "screen": "document-open",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 16.563,
+          "firstContentMs": 348.9,
+          "apiRequests": 13,
+          "httpRequests": 19,
+          "depth": 4
+        },
+        {
+          "screen": "document-tree",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 18.416,
+          "firstContentMs": 370.9,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "document-tree",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 25.899,
+          "firstContentMs": 378.2,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "document-tree",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 17.829,
+          "firstContentMs": 368.5,
+          "apiRequests": 15,
+          "httpRequests": 21,
+          "depth": 4
+        },
+        {
+          "screen": "gantt",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 33.053,
+          "firstContentMs": 453,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "gantt",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 33.054,
+          "firstContentMs": 453.9,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "gantt",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 35.608,
+          "firstContentMs": 455.7,
+          "apiRequests": 14,
+          "httpRequests": 20,
+          "depth": 4
+        },
+        {
+          "screen": "home",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 100.555,
+          "firstContentMs": 477.6,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "home",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 75.557,
+          "firstContentMs": 424.3,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "home",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 80.752,
+          "firstContentMs": 442.7,
+          "apiRequests": 11,
+          "httpRequests": 17,
+          "depth": 4
+        },
+        {
+          "screen": "my-tasks",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 16.043,
+          "firstContentMs": 304.6,
+          "apiRequests": 7,
+          "httpRequests": 13,
+          "depth": 3
+        },
+        {
+          "screen": "my-tasks",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 19.428,
+          "firstContentMs": 302.5,
+          "apiRequests": 7,
+          "httpRequests": 13,
+          "depth": 3
+        },
+        {
+          "screen": "my-tasks",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 16.791,
+          "firstContentMs": 291.2,
+          "apiRequests": 7,
+          "httpRequests": 13,
+          "depth": 3
+        },
+        {
+          "screen": "task-detail",
+          "repeat": 1,
+          "status": "VALID",
+          "p95Ms": 35.122,
+          "firstContentMs": 455.3,
+          "apiRequests": 20,
+          "httpRequests": 26,
+          "depth": 4
+        },
+        {
+          "screen": "task-detail",
+          "repeat": 2,
+          "status": "VALID",
+          "p95Ms": 34.17,
+          "firstContentMs": 455,
+          "apiRequests": 20,
+          "httpRequests": 26,
+          "depth": 4
+        },
+        {
+          "screen": "task-detail",
+          "repeat": 3,
+          "status": "VALID",
+          "p95Ms": 36.719,
+          "firstContentMs": 479.1,
+          "apiRequests": 20,
+          "httpRequests": 26,
+          "depth": 4
+        }
+      ],
+      "sql": [
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: organization",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 1.518,
+          "sharedHit": 262,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_choice",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.004,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_validation_unchanged",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 31.301,
+          "sharedHit": 41,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: today",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.152,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: workspace_scope",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.87,
+          "sharedHit": 306,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "up_next_and_counts",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 8.329,
+          "sharedHit": 987,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_tasks",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 4.083,
+          "sharedHit": 270,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_documents",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 7.376,
+          "sharedHit": 805,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "active_items",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 15.379,
+          "sharedHit": 2139,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "my_tasks",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 3.96,
+          "sharedHit": 709,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "pins_and_favorites_unchanged",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.066,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "all_lists_and_json",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 33.688,
+          "sharedHit": 4152,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: whole_function",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 68.736,
+          "sharedHit": 4215,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_count",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.11
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_access_sum",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 93.075
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_item_document_count",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.028
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_recent_activity",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 103.11
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_home",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 74.084
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_my_tasks",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 3.709
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_calendar",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 72.084
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_recent_activity",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 3.089
+        },
+        {
+          "kind": "native_db",
+          "metric": "rls_item_document_count",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 9.573
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_rls_only",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 9.245
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_reference",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 51.153
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_parent_visibility",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 60.697
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 60.676
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list_C1",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 18.142
+        },
+        {
+          "kind": "native_db",
+          "metric": "current_document_list_C2",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 9.913
+        },
+        {
+          "kind": "native_db",
+          "metric": "timezone_validation",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 30.465
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_item_visibility",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.227
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_list",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 15.845
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_detail",
+          "repeat": 1,
+          "status": "VALID",
+          "executionMs": 0.926
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: organization",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 1.421,
+          "sharedHit": 262,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_choice",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.004,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_validation_unchanged",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 31.103,
+          "sharedHit": 41,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: today",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.156,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: workspace_scope",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.868,
+          "sharedHit": 306,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "up_next_and_counts",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 8.394,
+          "sharedHit": 987,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_tasks",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 4.096,
+          "sharedHit": 270,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_documents",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 7.368,
+          "sharedHit": 805,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "active_items",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 15.368,
+          "sharedHit": 2139,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "my_tasks",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 4.027,
+          "sharedHit": 709,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "pins_and_favorites_unchanged",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.066,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "all_lists_and_json",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 34.047,
+          "sharedHit": 4152,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: whole_function",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 70.172,
+          "sharedHit": 4215,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_count",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.114
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_access_sum",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 93.093
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_item_document_count",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.027
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_recent_activity",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 103.929
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_home",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 73.735
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_my_tasks",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 3.629
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_calendar",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 75.005
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_recent_activity",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 3.008
+        },
+        {
+          "kind": "native_db",
+          "metric": "rls_item_document_count",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 9.436
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_rls_only",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 9.728
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_reference",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 50.799
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_parent_visibility",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 60.545
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 60.313
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list_C1",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 18.133
+        },
+        {
+          "kind": "native_db",
+          "metric": "current_document_list_C2",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 9.795
+        },
+        {
+          "kind": "native_db",
+          "metric": "timezone_validation",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 30.443
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_item_visibility",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.25
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_list",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 16.164
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_detail",
+          "repeat": 2,
+          "status": "VALID",
+          "executionMs": 0.952
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: organization",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 1.511,
+          "sharedHit": 262,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_choice",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 0.005,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: timezone_validation_unchanged",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 31.491,
+          "sharedHit": 41,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: today",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 0.15,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: workspace_scope",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 1.007,
+          "sharedHit": 306,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "up_next_and_counts",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 13.655,
+          "sharedHit": 987,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_tasks",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 4.634,
+          "sharedHit": 270,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "recent_documents",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 8.548,
+          "sharedHit": 805,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "active_items",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 16.192,
+          "sharedHit": 2139,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "my_tasks",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 4.088,
+          "sharedHit": 709,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "pins_and_favorites_unchanged",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 0.067,
+          "sharedHit": 0,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "all_lists_and_json",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 34.328,
+          "sharedHit": 4152,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "home_decomposition",
+          "metric": "home component: whole_function",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 68.782,
+          "sharedHit": 4215,
+          "sharedRead": 0,
+          "tempRead": 0,
+          "tempWritten": 0
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_count",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 0.09
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_document_access_sum",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 91.851
+        },
+        {
+          "kind": "native_db",
+          "metric": "owner_item_document_count",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 0.047
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_recent_activity",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 104.267
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_home",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 71.275
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_my_tasks",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 3.274
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_calendar",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 73.093
+        },
+        {
+          "kind": "native_db",
+          "metric": "app_recent_activity",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 3.337
+        },
+        {
+          "kind": "native_db",
+          "metric": "rls_item_document_count",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 9.535
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_rls_only",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 9.51
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_reference",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 52.099
+        },
+        {
+          "kind": "native_db",
+          "metric": "document_parent_visibility",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 60.343
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 61.02
+        },
+        {
+          "kind": "native_db",
+          "metric": "historical_document_list_C1",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 18.441
+        },
+        {
+          "kind": "native_db",
+          "metric": "current_document_list_C2",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 9.601
+        },
+        {
+          "kind": "native_db",
+          "metric": "timezone_validation",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 30.518
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_item_visibility",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 0.251
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_list",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 16.19
+        },
+        {
+          "kind": "native_db",
+          "metric": "task_detail",
+          "repeat": 3,
+          "status": "VALID",
+          "executionMs": 0.807
+        }
+      ]
+    }
+  ],
+  "summaries": [
+    {
+      "screen": "activity",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 79.806,
+        "min": 79.12,
+        "max": 84.132
+      },
+      "firstContentMs": {
+        "median": 426,
+        "min": 416.6,
+        "max": 443.3
+      },
+      "apiRequests": [11],
+      "httpRequests": [17],
+      "depth": [4]
+    },
+    {
+      "screen": "board",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 36.833,
+        "min": 33.618,
+        "max": 40.049
+      },
+      "firstContentMs": {
+        "median": 455.7,
+        "min": 434.6,
+        "max": 480.1
+      },
+      "apiRequests": [15, 14],
+      "httpRequests": [21, 20],
+      "depth": [4]
+    },
+    {
+      "screen": "calendar",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 82.701,
+        "min": 78.502,
+        "max": 87.507
+      },
+      "firstContentMs": {
+        "median": 417.4,
+        "min": 414,
+        "max": 428.6
+      },
+      "apiRequests": [10],
+      "httpRequests": [16],
+      "depth": [3]
+    },
+    {
+      "screen": "document-open",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 17.595,
+        "min": 16.563,
+        "max": 17.665
+      },
+      "firstContentMs": {
+        "median": 342.8,
+        "min": 342.1,
+        "max": 348.9
+      },
+      "apiRequests": [13],
+      "httpRequests": [19],
+      "depth": [4]
+    },
+    {
+      "screen": "document-tree",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 18.416,
+        "min": 17.829,
+        "max": 25.899
+      },
+      "firstContentMs": {
+        "median": 370.9,
+        "min": 368.5,
+        "max": 378.2
+      },
+      "apiRequests": [15],
+      "httpRequests": [21],
+      "depth": [4]
+    },
+    {
+      "screen": "gantt",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 33.054,
+        "min": 33.053,
+        "max": 35.608
+      },
+      "firstContentMs": {
+        "median": 453.9,
+        "min": 453,
+        "max": 455.7
+      },
+      "apiRequests": [14],
+      "httpRequests": [20],
+      "depth": [4]
+    },
+    {
+      "screen": "home",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 80.752,
+        "min": 75.557,
+        "max": 100.555
+      },
+      "firstContentMs": {
+        "median": 442.7,
+        "min": 424.3,
+        "max": 477.6
+      },
+      "apiRequests": [11],
+      "httpRequests": [17],
+      "depth": [4]
+    },
+    {
+      "screen": "my-tasks",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 16.791,
+        "min": 16.043,
+        "max": 19.428
+      },
+      "firstContentMs": {
+        "median": 302.5,
+        "min": 291.2,
+        "max": 304.6
+      },
+      "apiRequests": [7],
+      "httpRequests": [13],
+      "depth": [3]
+    },
+    {
+      "screen": "task-detail",
+      "status": "VALID",
+      "p95Ms": {
+        "median": 35.122,
+        "min": 34.17,
+        "max": 36.719
+      },
+      "firstContentMs": {
+        "median": 455.3,
+        "min": 455,
+        "max": 479.1
+      },
+      "apiRequests": [20],
+      "httpRequests": [26],
+      "depth": [4]
+    }
+  ],
+  "notRun": [
+    "H1 candidate",
+    "H2 control",
+    "C1 candidate",
+    "C2 candidate",
+    "candidate adoption",
+    "additional #173 consolidation",
+    "combined final HEAD T6",
+    "Daybreak security review"
+  ],
+  "restoredProductH2": true
+}
